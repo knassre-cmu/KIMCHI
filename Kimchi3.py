@@ -6,16 +6,6 @@ from cmu_112_graphics import *
 blockLibrary = {} # Dictionary of all known functions/atoms (used for defaults & drawing function library)
 maxVars = 32
 
-# TO DO LIST:
-# 1. Add min, max, replace
-# 2. Fix the positioning of the function slots
-# 3. Make sure that compound functions work
-# 4. Slot functions in/out variable slots
-# 5. Variable evaluator
-# 6. Function creator interface
-# 7. Finish funciton creator
-# 8. Saving progress
-
 def rgb2hex(r,g,b): # Returns a hexedecimal color string based on 3 rgb integers
     h1 = hex(r)[2:]
     h2 = hex(g)[2:]
