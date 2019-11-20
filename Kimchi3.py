@@ -30,23 +30,25 @@ def minimize(f,l): # Loop over a list and pick out the item with the smallest ou
     maxInput = blockLibrary['Null']
     maxOutput = blockLibrary['∞']
     for i in l:
-        if f(i) < maxOutput:
+        hof = replaceLambda(f,i)()
+        if fhof < maxOutput:
             maxInput = i
-            maxOutput = f(i)
+            maxOutput = hof
     return maxInput
 
 def optimize(f,l): # Loop over a list and pick out the item with the largest output to some function
     maxInput = blockLibrary['Null']
     maxOutput = blockLibrary['-∞']
     for i in l:
-        if f(i) > maxOutput:
+        hof = replaceLambda(f,i)()
+        if fhof > maxOutput:
             maxInput = i
-            maxOutput = f(i)
+            maxOutput = hof
     return maxInput
 
 def findFirst(f,l): # Loop over a list and pick out the first item that returns true for some function
     for i in l:
-        if f(i):
+        if replaceLambda(f,i)():
             return i
     return blockLibrary['Null']
 
@@ -55,6 +57,29 @@ def get(t,d,default): # Treat a list of 2-item lists as a dicitonary with the .g
         if i()[0] == t:
             return i()[1]
     return default
+
+def kSort(f,l): # Sorting HOF
+    return
+
+def kMap(f,l): # Mapping HOF
+    out = []
+    for i in l:
+        out.append(replaceLambda(f,i))
+    return Axis.Axis(*out)
+
+def kFilter(f,l):
+    out = []
+    for i in l:
+        if replaceLambda(f,i):
+            out.append(i)
+    return Axis.Axis(*out)
+
+def replaceLambda(f,i):
+    if f.name == chr(955):
+        return i
+    elif isinstance(f,Function):
+        return f.value(*map(lambda x: replaceLambda(x,i),f.operands))
+    return f()
 
 class Dragger(object): # Class of all draggable blocks
 
@@ -205,6 +230,13 @@ class ControlFunction(Function):
         super().__init__('ControlFunction',name,value,x,y,cloneable,defaults,slots,parent)
         self.color = '#e1ae5b'
 
+    def __call__(self): # If being treated like a function, call the lambda expression
+        try:
+            return self.value(self.operands[0],self.operands[1]())
+        except Exception as e: # If inputs are invalid, return the defualt and print an error
+            TopLevel.globalException(e)
+            return self.value(*map(lambda x: x(), self.defaults))
+
 class Atom(Dragger): # Class of all atoms
     def __init__(self,value,x,y,cloneable,name,parent=None):
         self.value, self.x, self.y, self.cloneable, self.name, self.parent = value, x, y, cloneable, name, parent
@@ -251,7 +283,7 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
     def appStarted(self):
         self.holding = [None]
         self.scrollY = 5
-        self.scrollMax = len(blockLibrary) * Dragger.targetSize * 1.415
+        self.scrollMax = len(blockLibrary) * Dragger.targetSize * 1.43
         self.scrollHeight = self.height
         self.scrolling = False
 
@@ -260,6 +292,7 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
         self.canvas = Canvas(self.app._root,width=800,height=800)
         self.canvas.config(width=800,height=800)
         self.canvas.pack()
+        TopLevel.globalCanvas = self.canvas
 
     def modeDeactivated(self): # When deactivated, re-impose the graphics-file canvas
         self.canvas.pack_forget()
@@ -338,6 +371,8 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
                 clone.drawFunction(self.canvas,self)
 
 class TopLevel(ModalApp): # Outermost app class
+    globalCanvas = None
+
     def appStarted(self):
         self.generateAtoms(25)
         self.generateFunctions(25)
@@ -346,8 +381,8 @@ class TopLevel(ModalApp): # Outermost app class
         self.setActiveMode(self.sandboxMode)
     
     @staticmethod
-    def globalException(self,e): # What to put on screen instead of an exception that crashes TKinter
-        self._activeMode.canvas.create_text(100,100,str(e),fill='White')
+    def globalException(e): # What to put on screen instead of an exception that crashes TKinter
+        TopLevel.globalCanvas.create_text(200,50+len(str(e)),text=str(e),fill='Grey',anchor='w')
 
     def generateAtoms(self,atomX): # Generates all Atoms
         out = [Atom(0,atomX,15,True,'0')]
@@ -364,6 +399,7 @@ class TopLevel(ModalApp): # Outermost app class
         out += [Atom(True,atomX,out[-1].y+Dragger.targetSize*2,True,'True')]
         out += [Atom(False,atomX,out[-1].y+Dragger.targetSize*2,True,'False')]
         out += [Atom(None,atomX,out[-1].y+Dragger.targetSize*2,True,'Null')]
+        out += [Atom(None,atomX,out[-1].y+Dragger.targetSize*2,True,chr(955))]
 
     def generateFunctions(self,atomX): # Generates all pre-built functions from a .txt file
         funcStr = open('PreFunctions.txt','r')
