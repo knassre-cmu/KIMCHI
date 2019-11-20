@@ -1,0 +1,82 @@
+ArithmeticFunction | + | lambda x,y: x + y | 0 0
+ArithmeticFunction | - | lambda x,y: x - y | 0 0
+ArithmeticFunction | * | lambda x,y: x * y | 0 0
+ArithmeticFunction | ** | lambda x,y: x ** y | 0 0
+ArithmeticFunction | / | lambda x,y: x / y | 0 1
+ArithmeticFunction | // | lambda x,y: x // y | 0 1
+ArithmeticFunction | % | lambda x,y: x % y | 0 1
+ArithmeticFunction | concat | lambda x,y: int(str(x) + str(y)) | 0 0
+ArithmeticFunction | sin | lambda x: math.sin(x) | 0
+ArithmeticFunction | cos | lambda x: math.cos(x) | 0
+ArithmeticFunction | tan | lambda x: math.tan(x) | 0
+ArithmeticFunction | asin | lambda x: math.asin(x) | 0
+ArithmeticFunction | acos | lambda x: math.acos(x) | 0
+ArithmeticFunction | atan | lambda x: math.atan(x) | 0
+ArithmeticFunction | log | lambda x,y: math.log(x,y) | 1 10
+ArithmeticFunction | abs | lambda x: abs(x) | 0
+ArithmeticFunction | round | lambda x,y : round(x,y) | 0 0
+ArithmeticFunction | random int | lambda x,y: random.randint(x,y) | 0 1
+LetterFunction | lower | lambda x: x.lower() | Silent
+LetterFunction | upper | lambda x: x.upper() | Silent
+LetterFunction | is lower | lambda x: x.islower() | Silent
+LetterFunction | is upper | lambda x: x.isupper() | Silent
+LetterFunction | chr | lambda x: chr(x) | 0
+LetterFunction | ord | lambda x: ord(x) | A
+LetterFunction | split | lambda x,y: x.split(y) | Silent Null
+LetterFunction | join | lambda x,y: str(y).join(list(map(lambda z: str(z),x))).replace("''",'') | Empty Silent
+LetterFunction | color | lambda x,y,z: rgb2hex(x,y,z) | 0 0 0
+IterableFunction | 1-list | lambda x: Axis.Axis(x) | Null
+IterableFunction | 2-list | lambda x,y: Axis.Axis(x,y) | Null Null
+IterableFunction | 4-list | lambda x,y,z,a: Axis.Axis(x,y,z,a) | Null Null Null Null
+IterableFunction | 8-list | lambda x,y,z,a,b,c,d,e: Axis.Axis(x,y,z,a,b,c,d,e) | Null Null Null Null Null Null Null Null
+IterableFunction | find | lambda x,y: x.find(y) | Empty Silent
+IterableFunction | count | lambda x,y: x.count(y) | Empty Silent
+IterableFunction | index | lambda x,y: x.index(y) | Empty 0
+IterableFunction | slice | lambda x,y,z,a: x[y:z:a] | Empty 0 0 1
+IterableFunction | contains | lambda x,y: y in x | Empty Null
+IterableFunction | reverse | lambda x: x.reverse() | Empty
+IterableFunction | length | lambda x: len(x) | Empty
+IterableFunction | head | lambda x: x[0] | Empty
+IterableFunction | tail | lambda x: x[1:] | Empty
+IterableFunction | last | lambda x: x[-1] | Empty
+IterableFunction | blast | lambda x: x[:-1] | Empty
+IterableFunction | take | lambda x,y: x.take(y) | Empty 0
+IterableFunction | drop | lambda x,y: x.drop(y) | Empty 0
+IterableFunction | replace | lambda x,y,z: x.replace(y,z) | Empty 0 Null
+IterableFunction | split list | lambda x,y: x.split(y) | Empty 0
+IterableFunction | invert | lambda x: x.invert() | Empty
+IterableFunction | column | lambda x,y: x.column(y) | Empty 0
+IterableFunction | rotate | lambda x,y: x.rotate(y) | Empty 1
+IterableFunction | pop | lambda x,y: x.pop(y) | Empty 0
+IterableFunction | remove | lambda x,y: x.remove(y) | Empty Null
+IterableFunction | remove all | lambda x,y: x.removeAll(y) | Empty Null
+IterableFunction | purge | lambda x: x.purge() | Empty
+IterableFunction | flatten | lambda x: x.flatten() | Empty
+IterableFunction | map | lambda x,y: x.map(y) | Empty Null
+IterableFunction | filter | lambda x,y: x.filter(y) | Empty True
+IterableFunction | combine | lambda x,y: x.combine(y) | Empty +
+IterableFunction | mean | lambda x: x.mean() | Empty
+IterableFunction | median | lambda x: x.median() | Empty
+IterableFunction | mode | lambda x: x.mode() | Empty
+IterableFunction | powerset | lambda x: x.powerset() | Empty
+IterableFunction | permutations | lambda x: x.permutations() | Empty
+IterableFunction | combinations | lambda x,y: list(filter(lambda z: len(z) == y, x.powerset())) | Empty 0
+IterableFunction | sort | lambda x: x.sort() | Empty
+PredicateFunction | and | lambda x,y: x and y | False False
+PredicateFunction | or | lambda x,y: x or y | False False
+PredicateFunction | not | lambda x: not(x) | False
+PredicateFunction | nand | lambda x,y: not(x and y) | False False
+PredicateFunction | nor | lambda x,y: not(x or y) | False False
+PredicateFunction | xor | lambda x,y: (x and y) or not(x and y) | False False
+PredicateFunction | < | lambda x,y: x < y | 0 0
+PredicateFunction | <= | lambda x,y: x <= y | 0 0
+PredicateFunction | == | lambda x,y: x == y | 0 0
+PredicateFunction | != | lambda x,y: x != y | 0 0
+PredicateFunction | >= | lambda x,y: x >= y | 0 0
+PredicateFunction | > | lambda x,y: x > y | 0 0
+ControlFunction | if else | lambda x,y,z: ifThenElse(x,y,z) | False Null Null
+ControlFunction | switch | lambda x,y,z: ifThenElse(x,y,z) | Null Empty Empty
+ControlFunction | optimize | lambda x,y: optimize(x,y) | Null Empty
+ControlFunction | minimize | lambda x,y: minimize(x,y) | Null Empty
+ControlFunction | find first | lambda x,y: findFirst(x,y) | Null Empty
+ControlFunction | get | lambda x,y,z: get(x,y,z) | False Empty Null
