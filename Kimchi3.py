@@ -6,6 +6,29 @@ from cmu_112_graphics import *
 blockLibrary = {} # Dictionary of all known functions/atoms (used for defaults & drawing function library)
 maxVars = 32
 
+# TO DO LIST:
+# 0. Add string replace
+# 0.5 Fix it so that thigns cant be placed in full slots
+# 1. Fix the positioning of the function slots
+# 2. Make sure that compound functions work
+# 3. Slot functions in/out variable slots
+# 4. Variable evaluator
+# 5. Function creator interface
+# 6. Finish funciton creator
+# 7. Saving progress
+
+def chunkifyString(s,l): # Chops up a string into lines of length l
+    out = []
+    row = ''
+    for w in s.split():
+        if len(w) + len(row) > l:
+            out.append(row)
+            row = w
+        else:
+            row += ' ' + w
+    out.append(row)
+    return '\n'.join(out).strip()
+
 def rgb2hex(r,g,b): # Returns a hexedecimal color string based on 3 rgb integers
     h1 = hex(r)[2:]
     h2 = hex(g)[2:]
@@ -22,35 +45,35 @@ def ifThenElse(condition,option1,option2): # If-else logic
 
 def switch(value,cases,outcomes): # Switch statements (to simplify excessive if-else nesting)
     for i in range(len(cases)):
-        if value == cases[i]():
+        if value == cases[i]:
             return outcomes[i]
     return blockLibrary['Null']
 
 def minimize(f,l): # Loop over a list and pick out the item with the smallest output to some function
-    maxInput = blockLibrary['Null']
-    maxOutput = blockLibrary['∞']
+    maxInput = None
+    maxOutput = float('inf')
     for i in l:
-        hof = replaceLambda(f,i)()
-        if fhof < maxOutput:
+        hof = replaceLambda(f,i)
+        if hof < maxOutput:
             maxInput = i
             maxOutput = hof
     return maxInput
 
 def optimize(f,l): # Loop over a list and pick out the item with the largest output to some function
-    maxInput = blockLibrary['Null']
-    maxOutput = blockLibrary['-∞']
+    maxInput = None
+    maxOutput = float('-inf')
     for i in l:
-        hof = replaceLambda(f,i)()
-        if fhof > maxOutput:
+        hof = replaceLambda(f,i)
+        if hof > maxOutput:
             maxInput = i
             maxOutput = hof
     return maxInput
 
 def findFirst(f,l): # Loop over a list and pick out the first item that returns true for some function
     for i in l:
-        if replaceLambda(f,i)():
+        if replaceLambda(f,i):
             return i
-    return blockLibrary['Null']
+    return None
 
 def get(t,d,default): # Treat a list of 2-item lists as a dicitonary with the .get() method
     for i in d:
@@ -59,7 +82,17 @@ def get(t,d,default): # Treat a list of 2-item lists as a dicitonary with the .g
     return default
 
 def kSort(f,l): # Sorting HOF
-    return
+    out = []
+    for i in l:
+        j = len(out)
+        k = replaceLambda(f,i)
+        while j > 0:
+            if k < replaceLambda(f,out[j-1]):
+                j -= 1
+            else:
+                break
+        out.insert(j,i)
+    return Axis.Axis(*out)
 
 def kMap(f,l): # Mapping HOF
     out = []
@@ -67,18 +100,26 @@ def kMap(f,l): # Mapping HOF
         out.append(replaceLambda(f,i))
     return Axis.Axis(*out)
 
-def kFilter(f,l):
+def kFilter(f,l): # Filtering HOF
     out = []
     for i in l:
         if replaceLambda(f,i):
             out.append(i)
     return Axis.Axis(*out)
 
-def replaceLambda(f,i):
+def kCombine(f,l): # Combination HOF
+    out = l[0]
+    for i in l[1:]:
+        out = replaceLambda(f,out,i)
+    return out
+
+def replaceLambda(f,i,m=None): # Replaces all lambda atoms with the desired input
     if f.name == chr(955):
         return i
+    elif f.name == chr(956):
+        return m
     elif isinstance(f,Function):
-        return f.value(*map(lambda x: replaceLambda(x,i),f.operands))
+        return f.value(*map(lambda x: replaceLambda(x,i,m),f.operands))
     return f()
 
 class Dragger(object): # Class of all draggable blocks
@@ -118,13 +159,20 @@ class Function(Dragger): # Class of all functions
 
     def getDimensions(self): # Update dimensions as things are dragged in/out
         self.xMin = Dragger.targetSize + 10 + len(self.name) * Dragger.fontSize/2.3
-        self.xMax = max([self.xMin]+list(map(lambda x: 0 if x == None else x.xMin, self.slots)))
+        self.xMax = max([self.xMin]+list(map(lambda a: self.xMin if a == None else a.xMax + Dragger.targetSize + 5, self.slots)))
         self.yMin = 2 * Dragger.targetSize
         self.yCords = [0]
         for i in range(len(self.slots)):
-            if self.slots[i] == None or not isinstance(self.slots[i-1],Dragger): self.yCords.append(self.yCords[-1]+self.yMin*1.1)
+            if i == 0: self.yCords.append(self.yMin*1.1)
+            elif self.slots[i-1] == None: self.yCords.append(self.yCords[-1]+self.yMin*1.1)
             else: self.yCords.append(self.yCords[-1]+self.slots[i-1].ySize)
-        self.ySize = self.yCords[-1] + self.yMin*1.1
+        self.ySize = self.yCords[-1]
+        if self.slots[-1] != None:
+            self.ySize += self.slots[-1].ySize
+        else:
+            self.ySize += self.yMin * 1.1
+        if self.parent != None:
+            self.parent.getDimensions()
 
     def getOperands(self): # Update operands according to if slots are empty or not
         for i in range(len(self.slots)):
@@ -154,15 +202,15 @@ class Function(Dragger): # Class of all functions
         if self == app.holding: clickColor = '#2e9121' # Green circle if currently being held
         else: clickColor = '#b91613' # Red circle if not
         x0, y0 = self.x - Dragger.targetSize, self.y - Dragger.targetSize
-        x1, y1 = self.x + self.xMin + Dragger.targetSize, self.y + Dragger.targetSize
-        y2 = y1 + self.ySize - self.yMin
+        x1, y1 = self.x + self.xMax + Dragger.targetSize, self.y + Dragger.targetSize
+        y2 = y1  + self.ySize - self.yMin
         x2 = self.x + Dragger.targetSize
         canvas.create_rectangle(self.x,y0,x1,y2,fill=self.color,width=0)
         canvas.create_oval(x0,y0,x2,y1,fill=clickColor,width=0)
         canvas.create_text(x2+3,self.y,anchor='w',text=self.name,font=f'Arial {Dragger.fontSize}')
         for i in range(len(self.operands)):
             if self.slots[i] == None:
-                yCord = self.yCords[i]
+                yCord = self.yCords[i+1] - self.yMin*1.1
                 canvas.create_oval(self.x+5,y1+yCord,self.x+5+Dragger.targetSize*2,y1+yCord+Dragger.targetSize*2,fill='White',width=0)
             elif isinstance(self.operands[i],Atom):
                 self.operands[i].drawAtom(canvas,app)
@@ -283,7 +331,7 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
     def appStarted(self):
         self.holding = [None]
         self.scrollY = 5
-        self.scrollMax = len(blockLibrary) * Dragger.targetSize * 1.43
+        self.scrollMax = len(blockLibrary) * Dragger.targetSize * 1.5
         self.scrollHeight = self.height
         self.scrolling = False
 
@@ -358,6 +406,7 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
     def redrawAll(self,canvas): # Manually implement animation using my own packed canvas
         self.canvas.delete(ALL)
         self.canvas.create_rectangle(0,0,self.width*0.8,self.height,fill='Black',width=0)
+        self.canvas.create_rectangle(2+self.width*0.8,self.height-13,self.width-2,self.height-127,fill='Black',width=2.5,outline='White')
         self.drawLibraryScroll(self.canvas)
         for book in blockLibrary.values():
             if isinstance(book,Atom):
@@ -372,17 +421,21 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
 
 class TopLevel(ModalApp): # Outermost app class
     globalCanvas = None
+    width, height = 800,800
 
     def appStarted(self):
+        self._root.resizable(False, False)
         self.generateAtoms(25)
         self.generateFunctions(25)
         #self.splashMode = SplashMode()
         self.sandboxMode = Sandbox()
         self.setActiveMode(self.sandboxMode)
-    
+
     @staticmethod
     def globalException(e): # What to put on screen instead of an exception that crashes TKinter
-        TopLevel.globalCanvas.create_text(200,50+len(str(e)),text=str(e),fill='Grey',anchor='w')
+        x0, y0 = TopLevel.width * 0.825, TopLevel.height * 0.8625
+        TopLevel.globalCanvas.create_oval(x0,y0,x0+20,y0+20,fill='#b91613',width=0)
+        TopLevel.globalCanvas.create_text(x0,y0+25,text=chunkifyString(str(e),25),anchor='nw',font='Arial 12',fill='White')
 
     def generateAtoms(self,atomX): # Generates all Atoms
         out = [Atom(0,atomX,15,True,'0')]
@@ -400,6 +453,7 @@ class TopLevel(ModalApp): # Outermost app class
         out += [Atom(False,atomX,out[-1].y+Dragger.targetSize*2,True,'False')]
         out += [Atom(None,atomX,out[-1].y+Dragger.targetSize*2,True,'Null')]
         out += [Atom(None,atomX,out[-1].y+Dragger.targetSize*2,True,chr(955))]
+        out += [Atom(None,atomX,out[-1].y+Dragger.targetSize*2,True,chr(956))]
 
     def generateFunctions(self,atomX): # Generates all pre-built functions from a .txt file
         funcStr = open('PreFunctions.txt','r')
