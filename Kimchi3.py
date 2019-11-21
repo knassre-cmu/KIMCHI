@@ -6,17 +6,6 @@ from cmu_112_graphics import *
 blockLibrary = {} # Dictionary of all known functions/atoms (used for defaults & drawing function library)
 maxVars = 32
 
-# TO DO LIST:
-# 0. Add string replace
-# 0.5 Fix it so that thigns cant be placed in full slots
-# 1. Fix the positioning of the function slots
-# 2. Make sure that compound functions work
-# 3. Slot functions in/out variable slots
-# 4. Variable evaluator
-# 5. Function creator interface
-# 6. Finish funciton creator
-# 7. Saving progress
-
 def chunkifyString(s,l): # Chops up a string into lines of length l
     out = []
     row = ''
