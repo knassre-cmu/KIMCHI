@@ -1,10 +1,19 @@
-import copy, math
+import copy, math, random, string
 from tkinter import *
 import Axis
 from cmu_112_graphics import *
 
 blockLibrary = {} # Dictionary of all known functions/atoms (used for defaults & drawing function library)
 maxVars = 16
+
+# TO DO LIST:
+# 1. Fix random setting
+# 2. Hardcode crashing on chr
+# 3. Function creator interface
+# 4. Finish funciton creator
+# 5. Saving progress
+# 6. Further customize error messages
+# 7. Animation engine
 
 def darkenColor(h): # Takes in a hex color and returns a darkened version
     conversion = {'f':'d','e':'c','d':'b','c':'a','b':'9','a':'8','9':'7',
@@ -77,8 +86,8 @@ def findFirst(f,l): # Loop over a list and pick out the first item that returns 
 
 def get(t,d,default): # Treat a list of 2-item lists as a dicitonary with the .get() method
     for i in d:
-        if i()[0] == t:
-            return i()[1]
+        if i[0] == t:
+            return i[1]
     return default
 
 def kSort(f,l): # Sorting HOF
@@ -125,7 +134,7 @@ def replaceLambda(f,i,m=None): # Replaces all lambda atoms with the desired inpu
 class Dragger(object): # Class of all draggable blocks
 
     cloneList = [] # List of all block clones
-    fontSize = 18
+    fontSize = 17
     targetSize = 10
     
     def __bool__(self): # If treated as a boolean, return boolean of value
@@ -190,6 +199,13 @@ class Function(Dragger): # Class of all functions
             TopLevel.globalException(e)
             return self.value(*map(lambda x: x(), self.defaults))
 
+    def exception(self):
+        try:
+            self.value(*map(lambda x: x(), self.operands))
+            return False
+        except:
+            return True
+
     def __repr__(self): # How to print for debugging:
         return f'{self.name} ({", ".join(map(lambda x: str(x),self.operands))}) => {str(self())}'
 
@@ -200,18 +216,19 @@ class Function(Dragger): # Class of all functions
         x2 = self.x + Dragger.targetSize
         canvas.create_rectangle(self.x,y0-app.scrollY,x1,y1-app.scrollY,fill=self.color,width=0)
         canvas.create_oval(x0,y0-app.scrollY,x2,y1-app.scrollY,fill=clickColor,width=0)
-        canvas.create_text(x2+3,self.y-app.scrollY,anchor='w',text=self.name,font=f'Arial {Dragger.fontSize}')
+        canvas.create_text(x2+3,self.y-app.scrollY,anchor='w',text=self.name,font=f'Times {Dragger.fontSize}')
 
     def drawFunction(self,canvas,app): # Draws the cloned functions
-        if self == app.holding: clickColor = '#2e9121' # Green circle if currently being held
+        if self == app.holding:
+            clickColor = self.clickColor
         else: clickColor = '#b91613' # Red circle if not
         x0, y0 = self.x - Dragger.targetSize, self.y - Dragger.targetSize
         x1, y1 = self.x + self.xMax + Dragger.targetSize, self.y + Dragger.targetSize
         y2 = y1  + self.ySize - self.yMin
         x2 = self.x + Dragger.targetSize
-        canvas.create_rectangle(self.x,y0-app.scrollY2,x1,y2-app.scrollY2,fill=self.color,width=2,outline=darkenColor(self.color))
+        canvas.create_rectangle(self.x+2,y0-app.scrollY2+2,x1-2,y2-app.scrollY2-2,fill=self.color,width=2,outline=darkenColor(self.color))
         canvas.create_oval(x0,y0-app.scrollY2,x2,y1-app.scrollY2,fill=clickColor,width=0)
-        canvas.create_text(x2+3,self.y-app.scrollY2,anchor='w',text=self.name,font=f'Arial {Dragger.fontSize}')
+        canvas.create_text(x2+3,self.y-app.scrollY2,anchor='w',text=self.name,font=f'Times {Dragger.fontSize}')
         for i in range(len(self.operands)):
             if self.slots[i] == None:
                 yCord = self.yCords[i+1] - self.yMin*1.1
@@ -301,14 +318,15 @@ class MasterFunction(Function):
     def drawFunction(self,canvas,app): # Draws the variable setter
         if self == app.holding: clickColor = '#2e9121' # Green circle if currently being held
         else: clickColor = '#b91613' # Red circle if not
+        self.xMax = max([self.xMin]+list(map(lambda a: a.xMax + Dragger.targetSize + self.buffer if isinstance(a,Dragger) else 0, self.slots)))
         x0, y0 = self.x - Dragger.targetSize, self.y - Dragger.targetSize
         x1, y1 = self.x + self.xMax + Dragger.targetSize, self.y + Dragger.targetSize
         y2 = y1  + self.ySize - self.yMin
         x2 = self.x + Dragger.targetSize
-        canvas.create_rectangle(self.x,y0-app.scrollY2,x1,y2-app.scrollY2,fill=self.color,width=2,outline=darkenColor(self.color))
-        canvas.create_text(x2-3,self.y-app.scrollY2,anchor='w',text=self.name,font=f'Arial {Dragger.fontSize}')
+        canvas.create_rectangle(self.x+2,y0-app.scrollY2+2,x1-2,y2-app.scrollY2-2,fill=self.color,width=2,outline=darkenColor(self.color))
+        canvas.create_text(x2-3,self.y-app.scrollY2,anchor='w',text=self.name,font=f'Times {Dragger.fontSize}')
         for i in range(len(self.operands)):
-            canvas.create_text(self.x+self.buffer/2,self.y+self.yCords[i+1]-app.scrollY2,text=f'V{i}')
+            canvas.create_text(self.x+self.buffer/2,self.y+self.yCords[i+1]-app.scrollY2,text=f'V{i}',font=f'Times {Dragger.fontSize-2}')
             if self.slots[i] == None:
                 yCord = self.yCords[i+1] - self.yMin*1.1 -app.scrollY2
                 canvas.create_oval(self.x+self.buffer,y1+yCord,self.x+self.buffer+Dragger.targetSize*2,y1+yCord+Dragger.targetSize*2,fill='White',width=0)
@@ -351,7 +369,7 @@ class Atom(Dragger): # Class of all atoms
         x2 = self.x + Dragger.targetSize
         canvas.create_rectangle(self.x,y0-app.scrollY,x1,y1-app.scrollY,fill=self.color,width=0)
         canvas.create_oval(x0,y0-app.scrollY,x2,y1-app.scrollY,fill=clickColor,width=0)
-        canvas.create_text(x2+3,self.y-app.scrollY,anchor='w',text=self.name,font=f'Arial {Dragger.fontSize}')
+        canvas.create_text(x2+3,self.y-app.scrollY,anchor='w',text=self.name,font=f'Times {Dragger.fontSize}')
 
     def drawAtom(self,canvas,app): # Draws the cloned atoms
         if self == app.holding: clickColor = '#2e9121' # Green circle if currently being held
@@ -359,9 +377,9 @@ class Atom(Dragger): # Class of all atoms
         x0, y0 = self.x - Dragger.targetSize, self.y - Dragger.targetSize
         x1, y1 = self.x + Dragger.targetSize + self.xMin, self.y + Dragger.targetSize
         x2 = self.x + Dragger.targetSize
-        canvas.create_rectangle(self.x,y0-app.scrollY2,x1,y1-app.scrollY2,fill=self.color,width=2,outline=darkenColor(self.color))
+        canvas.create_rectangle(self.x+2,y0-app.scrollY2+2,x1-2,y1-app.scrollY2-2,fill=self.color,width=2,outline=darkenColor(self.color))
         canvas.create_oval(x0,y0-app.scrollY2,x2,y1-app.scrollY2,fill=clickColor,width=0)
-        canvas.create_text(x2+3,self.y-app.scrollY2,anchor='w',text=self.name,font=f'Arial {Dragger.fontSize}')
+        canvas.create_text(x2+3,self.y-app.scrollY2,anchor='w',text=self.name,font=f'Times {Dragger.fontSize}')
 
 class VarAtom(Atom): # Subclass of Atom to handle variable atoms
     def __init__(self,value,x,y,cloneable,name,parent=None):
@@ -405,7 +423,41 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
         self.canvas.pack_forget()
         self.app._canvas.pack()
 
+    def pressingButtons(self,x,y):
+        y0, y1, y2 = 675, 725, 775
+        y0, y1, y2, y3 = 650, 700, 750, 800
+        options = [self.app.splashMode,self.app.splashMode,self.app.splashMode]
+        yVals = [675, 725, 775]
+        for i in range(3):
+            if (x > 590 or ((x-590)**2 + (y-yVals[i])**2) < 625) and x < 630 and y < yVals[i]+25 and y > yVals[i]-25:
+                if i == 1:
+                    self.getFunctionInfo()
+                else:
+                    self.app.setActiveMode(options[i])
+
+    def getFunctionInfo(self):
+        fName = self.getUserInput('What is the function\'s name?')
+        if fName == None or fName == '' or len(fName) > 14 or fName in map(lambda x: x.name, blockLibrary.values()):
+            nextStep = self.getUserInput(f'"{fName}" is not a valid name.\nType exit to quit.\nType anything else to try agian.')
+            if nextStep != 'exit':
+                self.getFunctionInfo()
+        else:
+            fType = self.getUserInput(f'What type of function is {fName}?')
+            if fType == None or fType.lower() not in ['letter','arithmetic','iterable','predicate','control']:
+                nextStep = self.getUserInput(f'{fType} is not a valid function type.\nType exit to quit.\nType anything else to try agian.')
+                if nextStep != 'exit':
+                    self.getFunctionInfo()
+            else:
+                fInpt = self.getUserInput(f'How many inputs does {fName} have?')
+                if fInpt not in map(lambda x: str(x), range(10)):
+                    nextStep = self.getUserInput(f'{fInpt} is not a valid number of inputs.\nType exit to quit.\nType anything else to try agian.')
+                    if nextStep != 'exit':
+                        self.getFunctionInfo()
+                else:
+                    print(fName,fType,fInpt)
+
     def mousePressed(self,event): # Check for scrolling & dragging Atoms/Functions
+        self.pressingButtons(event.x,event.y)
         if event.x < 10:
             self.scrolling = True
             return
@@ -420,10 +472,13 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
                 continue
             contact = i.touching(event.x,event.y,self)
             if contact != None:
-                print(contact)
                 if contact.name == 'Set Variables':
                     return
                 self.holding = contact
+                if isinstance(contact,Function) and contact.exception():
+                    contact.clickColor = '#f2e422' # Yellow circle if causing an error
+                else:
+                    contact.clickColor = '#2e9121' # Green circle if currently being held
                 if self.holding.parent != None:
                     for i in range(len(self.holding.parent.slots)):
                         if self.holding.parent.slots[i] == self.holding:
@@ -466,6 +521,8 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
             return
         self.holding.x = event.x
         self.holding.y = event.y + self.scrollY2
+        if isinstance(self.holding,Function):
+            self.holding.slotify()
         xEdge = event.x + self.holding.xMax/2
         if event.x - Dragger.targetSize < 150 or xEdge > self.width*0.8:
             Dragger.cloneList.remove(self.holding)
@@ -505,16 +562,30 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
 
     def drawEvaluator(self,canvas):
         x0 = self.width * 0.81
-        y0 = 15 - self.scrollY3
-        out = []
+        y0 = 10 - self.scrollY3
+        out = ['Variable Evaluator:']
         for i in range(maxVars):
             v = TopLevel.Vars[i]
             if v == None or v.value == None:
                 out.append(f'V{i} = Null')
             else:
-                out.append(chunkifyString(f'V{i} = {v()}',20))
+                if isinstance(v(),float):
+                    out.append(chunkifyString(f'V{i} = {round(v(),8)}',30))
+                else:
+                    out.append(chunkifyString(f'V{i} = {v()}',30))
         Sandbox.VarString = '\n'.join(out)
-        canvas.create_text(x0,y0,anchor='nw',text=Sandbox.VarString,fill='Green')
+        canvas.create_text(x0,y0,anchor='nw',text=Sandbox.VarString,fill='Green',font='Times 10')
+
+    def drawButtons(self,canvas):
+        r = 25
+        x0, x1 = 590, 630
+        y0, y1, y2, y3 = 650, 700, 750, 800
+        canvas.create_rectangle(x0,y0,x1,y1,width=0,fill='Red')
+        canvas.create_oval(x0-r,y0,x0+r,y1,width=0,fill='Red')
+        canvas.create_rectangle(x0,y1,x1,y2,width=0,fill='Green')
+        canvas.create_oval(x0-r,y1,x0+r,y2,width=0,fill='Green')
+        canvas.create_rectangle(x0,y2,x1,y3,width=0,fill='White')
+        canvas.create_oval(x0-r,y2,x0+r,y3,width=0,fill='White')
 
     def redrawAll(self,canvas): # Manually implement animation using my own packed canvas
         self.canvas.delete(ALL)
@@ -522,12 +593,13 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
         self.canvas.create_rectangle(1+self.width*0.8,self.height,self.width-2,self.height-129,fill='Black',width=3,outline='White')
         self.drawLibraryScroll(self.canvas)
         self.drawEvaluator(self.canvas)
+        self.drawButtons(self.canvas)
+        TopLevel.VariableSlots.drawFunction(self.canvas,self)
         for book in blockLibrary.values():
             if isinstance(book,Atom):
                 book.drawLibraryAtom(self.canvas,self)
             else:
                 book.drawLibraryFunction(self.canvas,self)
-        TopLevel.VariableSlots.drawFunction(self.canvas,self)
         for clone in Dragger.cloneList:
             if isinstance(clone,Atom):
                 clone.drawAtom(self.canvas,self)
@@ -545,15 +617,15 @@ class TopLevel(ModalApp): # Outermost app class
         self.generateFunctions(25)
         TopLevel.Defaults = [blockLibrary['Null'] for i in range(maxVars)]
         TopLevel.VariableSlots = MasterFunction('Set Variables')
-        #self.splashMode = SplashMode()
+        self.splashMode = SplashMode()
         self.sandboxMode = Sandbox()
-        self.setActiveMode(self.sandboxMode)
+        self.setActiveMode(self.splashMode)
 
     @staticmethod
     def globalException(e): # What to put on screen instead of an exception that crashes TKinter
         x0, y0 = TopLevel.width * 0.825, TopLevel.height * 0.8625
-        TopLevel.globalCanvas.create_oval(x0,y0,x0+20,y0+20,fill='#b91613',width=0)
-        TopLevel.globalCanvas.create_text(x0,y0+25,text=chunkifyString(customError(e),25),anchor='nw',font='Arial 12',fill='White')
+        TopLevel.globalCanvas.create_oval(x0,y0,x0+20,y0+20,fill='#f2e422',width=0)
+        TopLevel.globalCanvas.create_text(x0,y0+25,text=chunkifyString(customError(e),25),anchor='nw',font='Times 12',fill='White')
 
     def generateAtoms(self,atomX): # Generates all Atoms
         out = [VarAtom(TopLevel.Vars[0],atomX,15,True,'V0')]
@@ -581,5 +653,58 @@ class TopLevel(ModalApp): # Outermost app class
         out = [Function.genesis(iFunctions[0],atomX,Dragger.targetSize*2*(len(blockLibrary)+0.75))]
         for i in iFunctions[1:]:
             out += [Function.genesis(i,atomX,out[-1].y+Dragger.targetSize*2)]
+
+class SplashMode(Mode): # The colorful splash screen mode
+    def modeActivated(self): # When activated, discard the graphics-file canvas
+        self.app._canvas.pack_forget()
+        self.canvas = Canvas(self.app._root,width=800,height=800)
+        self.canvas.config(width=800,height=800)
+        self.canvas.pack()
+        TopLevel.globalCanvas = self.canvas
+
+    def appStarted(self):
+        self.spin = 0
+        self.timerDelay = 5
+        self.squares = [self.polarize(400,250,self.hexaSpin(200,math.radians(t)),math.radians(t)) for t in range(0,360,2)]
+
+    def modeDeactivated(self): # When deactivated, re-impose the graphics-file canvas
+        self.canvas.pack_forget()
+        self.app._canvas.pack()    
+
+    def polarize(self,x,y,r,t): # Generates a coordinate based on polar instrucitons
+        dX = r * math.cos(t)
+        dY = r * math.sin(t)
+        return (x+dX,y+dY)
+
+    def hexaSpin(self,r,t): # Generates points on a hexagon from polar instructions
+        n = 6 # n controls number of sides
+        return r * math.cos(math.pi/n) / (math.cos(t % (math.pi/(n/2)) - math.pi/n))
+        
+    def keyPressed(self,event): # Switch between modes (temporary)
+        if event.key == 'e':
+            self.app.setActiveMode(self.app.sandboxMode)
+
+    def timerFired(self): # Increment the animation
+        self.spin += 5
+        self.squares.append(self.squares.pop(0))
+
+    def drawSquare(self,i,square,canvas): # Drawing each square based on polar formula
+        x0, y0 = square
+        s = 70
+        x1, y1 = x0 + s * math.cos(math.radians(i)), y0 + s * math.sin(math.radians(i))
+        x2, y2 = x0 + s * math.cos(math.radians(i+90)), y0 + s * math.sin(math.radians(i+90))
+        x3, y3 = x0 + s * math.cos(math.radians(i+180)), y0 + s * math.sin(math.radians(i+180))
+        x4, y4 = x0 + s * math.cos(math.radians(i-90)), y0 + s * math.sin(math.radians(i-90))
+        red = int(85 * math.sin(2*math.pi*(i/360)) + 170)
+        green = int(85 * math.sin(2*math.pi*((i+120)/360)) + 170)
+        blue = int(85 * math.sin(2*math.pi*((i+240)/360)) + 170)
+        color = '#' + hex(red)[2:] + hex(green)[2:] + hex(blue)[2:]
+        canvas.create_polygon(x1,y1,x2,y2,x3,y3,x4,y4,fill=color,width=0)
+
+    def redrawAll(self,canvas): # Clear canvas with each tick & draw all squares
+        self.canvas.delete(ALL)
+        self.canvas.create_rectangle(0,0,self.width,self.height,fill='Black')
+        for i,square in enumerate(self.squares):
+            self.drawSquare(9*i+self.spin%360,square,self.canvas)
 
 TopLevel(width=800,height=800)
