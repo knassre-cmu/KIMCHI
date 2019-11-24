@@ -6,16 +6,6 @@ from cmu_112_graphics import *
 blockLibrary = {} # Dictionary of all known functions/atoms (used for defaults & drawing function library)
 maxVars = 16
 
-# TO DO LIST:
-# 1. Fix animaiton of borders
-# 1.5: Fix random setting
-# 2. Hardcode crashing on chr
-# 3. Function creator interface
-# 4. Finish funciton creator
-# 5. Saving progress
-# 6. Further customize error messages
-# 7. Animation engine
-
 def darkenColor(h): # Takes in a hex color and returns a darkened version
     conversion = {'f':'d','e':'c','d':'b','c':'a','b':'9','a':'8','9':'7',
     '8':'6','7':'5','6':'4','5':'3','4':'2','3':'1','2':'0','1':'0','0':'0'}
