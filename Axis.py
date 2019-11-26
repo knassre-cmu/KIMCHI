@@ -1,6 +1,6 @@
-# Axis datatype, similar to Python tuples but with several fancy methods and the ability to slice wrap-around
-
 import random
+
+# I originally wrote this during (BUT NOT FOR) adv. OOP week, but heavily modified it since then
 
 class Axis(object): # Custom immutable list class with some useful methods
     def __init__(self,*values):
@@ -15,6 +15,8 @@ class Axis(object): # Custom immutable list class with some useful methods
     def __delattr__(cls, name): # Immutable after initialization
         raise AttributeError(f"Cannot delete Axis {name}")
 
+    # True __repr__, commented out for sake of the KIMCHI evaluator
+    '''
     def __repr__(self): # Represent an Axis as a list
         if len(self) == 0:
             return 'ø' # Axis(): the empty axis
@@ -30,6 +32,19 @@ class Axis(object): # Custom immutable list class with some useful methods
             if i < len(self)-1:
                 out += ' • '
         out += ' *|'
+        return out
+    '''
+
+    def __repr__(self): # Temporary __repr__, used for KIMCHI evaluator
+        if len(self) == 0:
+            return 'ø' # Axis(): the empty axis
+        out = '{'
+        for i in range(len(self)):
+            nextVal = self[i]
+            out += str(self[i])
+            if i < len(self)-1:
+                out += ' • '
+        out += '}'
         return out
         
     def __len__(self): # Get the length of an axis
@@ -442,11 +457,3 @@ class Axis(object): # Custom immutable list class with some useful methods
         if n == None:
             return self
         return self.pop(k).inject(k,n)
-
-A0 = Axis()
-A1 = Axis(1,2,3,4)
-A2 = Axis('a','c','e','g')
-A3 = Axis(2,3,5,7,11)
-A4 = Axis('x','y','z')
-A5 = Axis(A1,A2,A3,A4)
-A6 = Axis(0,1,2)
