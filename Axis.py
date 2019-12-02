@@ -220,17 +220,17 @@ class Axis(object): # Custom immutable list class with some useful methods
             maxCols = max(maxCols,len(row))
         out = []
         for c in range(maxCols):
-            col = []
+            col = Axis()
             for r in range(len(self)):
                 if not isinstance(self[r],(list,tuple,Axis)):
                     if c == 0:
-                        col.append(self[r])
+                        col = col.append(self[r])
                     else:
-                        col.append(None)
+                        col = col.append(None)
                 elif len(self[r]) > c:
-                    col.append(self[r][c])
+                    col = col.append(self[r][c])
                 else:
-                    col.append(None)
+                    col = col.append(None)
             out.append(col)
         if len(out) == 0:
             out = [Axis()]
@@ -407,9 +407,9 @@ class Axis(object): # Custom immutable list class with some useful methods
         frequency = 0
         out = Axis()
         for i in self.purge():
-            count = self.count(lambda x: x == i)
+            count = self.count(i)
             if count == frequency:
-                out.append(i)
+                out = out.append(i)
             if count > frequency:
                 frequency = count
                 out = Axis(i)
@@ -457,3 +457,11 @@ class Axis(object): # Custom immutable list class with some useful methods
         if n == None:
             return self
         return self.pop(k).inject(k,n)
+
+A0 = Axis()
+A1 = Axis(1,2,3,4)
+A2 = Axis('a','c','e','g')
+A3 = Axis(2,3,5,7,11)
+A4 = Axis('x','y','z')
+A5 = Axis(A1,A2,A3,A4)
+A6 = Axis(0,1,2)
