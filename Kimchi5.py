@@ -4,6 +4,13 @@ from tkinter import simpledialog
 import Axis
 from cmu_112_graphics import * # From https://www.cs.cmu.edu/~112/notes/notes-animations-part1.html
 
+# To do list:
+# fix the evaluator section in Function Creator mode
+# improve capabilities of random
+# widen screen
+# add custom backgrounds (w saving?)
+# fix Quandry & Mystery in tutorial mode (delete upon exiting)
+
 blockLibrary = {} # Dictionary of all known functions/atoms (used for defaults & drawing function library)
 customFunctions = set() # Set of all custom functions that will be exported with saving
 ioLibrary = {} # Dictionary of input atoms used for function genesis
@@ -63,7 +70,6 @@ def callBlockWithInputs(f,parent): # Parses through a list of strings representi
         except: return None
 
 def customError(e):
-    print(str(e))
     return str(e)
 
 def darkenColor(h,level=1): # Takes in a hex color and returns a darkened version
@@ -186,6 +192,12 @@ def replaceLambda(f,i,m=None,k=0): # Replaces all lambda atoms with the desired 
     elif isinstance(f,str): # What to do if the HOF is a datastring Atom
         return blockLibrary[f].value
     return f() # Backup case: just let __call__ sort it out
+
+def randomList(n,k): # Return a list of n random floats with seed k
+    out = [round((hash(k/math.pi)/100000)%1,8)] # use hashing to generate pseudo randomness
+    for i in range(n-1):
+        out.append(round((out[-1]+hash(out[-1]/math.pi)/100000)%1,8))
+    return Axis.Axis(*out)
 
 class Dragger(object): # Class of all draggable blocks
 
@@ -1296,7 +1308,7 @@ class TutorialMode(Mode): # Help screen
     def appStarted(self):
         self.holding = [None]
         self.scrollY = self.scrollY2 = 0
-        self.scrollM = 800
+        self.scrollM = 850
         self.prism = '#666666'
         self.time = 0
         self.textList = self.getText()
@@ -1386,7 +1398,13 @@ class TutorialMode(Mode): # Help screen
         Custom Functions or the Variable Sandbox unless you exit out of K.I.M.C.H.I.
         without saving. To change the backdrop of the Variable Sandbox, press the
         yellow spiral button.''',90)
-        for i in blocks1.splitlines() + blocks2.splitlines() + blocks3.splitlines() + [''] +blocks4.splitlines() + ([''] * 8) + blocks5.splitlines() + ([''] * 29) + blocks6.splitlines():
+        blocks7 = chunkifyString(f'''
+        PS: several functions involve randomness and random numbers. The random
+        float/integer/item is reset upon clicking on the random function in question.
+        Using random functions in higher order functions is ok in the Variibale Sandbox,
+        but using random functions at all inside of custom functions is to be avoided.
+        Instead, try to generate the randomness inside of inputs.''',90)
+        for i in blocks1.splitlines() + blocks2.splitlines() + blocks3.splitlines() + [''] + blocks4.splitlines() + ([''] * 8) + blocks5.splitlines() + ([''] * 29) + blocks6.splitlines() + [''] + blocks7.splitlines():
             out.append({'x':30,'y':out[-1]['y']+20,'text':i,'font':'Times 16','anchor':'w','fill':'Black'})
         return out
 
