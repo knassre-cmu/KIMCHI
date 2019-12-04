@@ -14,8 +14,8 @@ ArithmeticFunction | arccos | lambda x: math.acos(x) | 0
 ArithmeticFunction | arctan | lambda x: math.atan(x) | 0
 ArithmeticFunction | log | lambda x,y: math.log(x,y) | 1 10
 ArithmeticFunction | abs | lambda x: abs(x) | 0
-ArithmeticFunction | min | lambda x: min(x) | Empty
-ArithmeticFunction | max | lambda x: max(x) | Empty
+ArithmeticFunction | min | lambda x: min(x) if len(x) > 0 else None | Empty
+ArithmeticFunction | max | lambda x: max(x) if len(x) > 0 else None | Empty
 ArithmeticFunction | int | lambda x: int(x) | 0
 ArithmeticFunction | float | lambda x: float(x) | 0
 ArithmeticFunction | round | lambda x,y : round(x,y) | 0 0
@@ -28,7 +28,7 @@ LetterFunction | is lower | lambda x: x.islower() | Silent
 LetterFunction | is upper | lambda x: x.isupper() | Silent
 LetterFunction | chr | lambda x: chr(x) if x > 32 else "''" | 10
 LetterFunction | ord | lambda x: ord(x) | A
-LetterFunction | split | lambda x,y: x.split(y) if y != None and y.value != None else Axis.Axis(*list(x)) | Silent Null
+LetterFunction | split | lambda x,y: stringSplit(x,y) | Silent Null
 LetterFunction | join | lambda x,y: str(y).join(list(map(lambda z: str(z),x))).replace("''",'') | Empty Silent
 LetterFunction | string | lambda x: str(x) | Silent
 LetterFunction | s-replace | lambda x,y,z,a: x.replace(y,z,a) | Silent Silent Silent 0
@@ -39,7 +39,7 @@ IterableFunction | 4-list | lambda x,y,z,a: Axis.Axis(x,y,z,a) | Null Null Null 
 IterableFunction | 8-list | lambda x,y,z,a,b,c,d,e: Axis.Axis(x,y,z,a,b,c,d,e) | Null Null Null Null Null Null Null Null
 IterableFunction | range | lambda x,y,z: Axis.Axis(*list(range(x,y,z))) | 0 0 1
 IterableFunction | item | lambda x,y: x[y] | Empty 0
-IterableFunction | find | lambda x,y: x.find(y) | Empty Silent
+IterableFunction | index | lambda x,y: x.index(y) | Empty Silent
 IterableFunction | count | lambda x,y: x.count(y) | Empty Silent
 IterableFunction | slice | lambda x,y,z,a: x[y:z:a] | Empty 0 0 1
 IterableFunction | contains | lambda x,y: y in x | Empty Null
@@ -69,6 +69,7 @@ IterableFunction | powerset | lambda x: x.powerset() | Empty
 IterableFunction | permutations | lambda x: x.permutations() | Empty
 IterableFunction | combinations | lambda x,y: Axis.Axis(*filter(lambda z: len(z) == y, x.powerset())) | Empty 0
 IterableFunction | enumerate | lambda x: Axis.Axis(*[Axis.Axis(i,x[i]) for i in range(len(x))]) | Empty
+IterableFunction | random list | lambda x,y: randomList(x,y) | 1 1
 IterableFunction | zip | lambda x,y: Axis.Axis(*[Axis.Axis(x[j],y[j]) for j in range(min(len(x),len(y)))]) | Empty Empty
 IterableFunction | keys | lambda x: Axis.Axis(*[j[0] for j in x]) | Empty
 IterableFunction | values | lambda x: Axis.Axis(*[j[1] for j in x]) | Empty
@@ -78,7 +79,7 @@ PredicateFunction | or | lambda x,y: x or y | False False
 PredicateFunction | not | lambda x: not(x) | False
 PredicateFunction | nand | lambda x,y: not(x and y) | False False
 PredicateFunction | nor | lambda x,y: not(x or y) | False False
-PredicateFunction | xor | lambda x,y: (x and y) or not(x and y) | False False
+PredicateFunction | xor | lambda x,y: (x and y) and not(not(x) and not(y)) | False False
 PredicateFunction | < | lambda x,y: x < y | 0 0
 PredicateFunction | <= | lambda x,y: x <= y | 0 0
 PredicateFunction | == | lambda x,y: x == y | 0 0
