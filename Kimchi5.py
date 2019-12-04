@@ -38,7 +38,7 @@ def callBlockWithInputs(f,parent,depth=0): # Parses through a list of strings re
             return func.value(f[1],callBlockWithInputs(f[2],parent,depth+1))
         if isinstance(func,CustomFunction): # If a custom function, retrieve it's data string
             if CreationMode.frankenstein != None and f[0] == CreationMode.frankenstein.name: # If calling the function currently being worked on, get it from the class attributtes
-                data = TopLevel.FuncSlots.slots[0].FuncToString()
+                data = KIMCHI.FuncSlots.slots[0].FuncToString()
             else: data = func.dataString
             return callBlockWithInputs(fillBlockWithInputs(data,list(map(lambda x: callBlockWithInputs(x,parent,depth+1) if str(x) not in ['None','Null'] else None, f[1:]))),parent,depth+1)
         if func.name == 'if else': # Sequential-evaluation logic (if-else, switch) requires manual implementation
@@ -63,12 +63,22 @@ def callBlockWithInputs(f,parent,depth=0): # Parses through a list of strings re
                 return l[int(pRand*len(l))]
         return func.value(*map(lambda x: callBlockWithInputs(x,parent,depth+1) if str(x) not in ['None','Null'] else None, f[1:]))
     except Exception as e: # Catch all errors under the global exception
-        TopLevel.globalException(e)
+        KIMCHI.globalException(e)
         try: return func()
         except: return None
 
-def customError(e):
-    return str(e)
+def customError(e): # Takes standard python error messages and reskins them
+    s = str(e).replace("'Axis' object",'iterable')
+    print(s)
+    if s == 'math domain error': return 'MathError: Input is of the right type but not within the defined domain of this funciton. Default value returned instead.'
+    if s[1] in ['<','>']: return 'CompError: Cannot compare values of those types. False returned by default.'
+    if 'slice indices' in s: return 'SliceError: Indices must be integers or Null. Empty iterable returned by default.'
+    if 'has no len()' in s or 'is not subscriptable' in s or 'is not iterable' in s: return 'IterableError: Can only use iterable functions on iterables. Null returned by default.'
+    if 'recurse' in s: return 'RecursionError: Exceeded recursive capacity. Null returned by default.'
+    if 'division by zero' in s or 'modulo by zero' in s: return 'ZeroError: Cannot divide by zero. 0 returned by default.'
+    if ('NoneType' in s or 'unsupported operand' in s or 'has no attribute' in s or 'cannot be interpreted as' in s or 'invalid literal for' in s 
+    or 'could not convert' in s): return 'NullError: Insufficiant or invalid input(s) recieved and caused a propogating error. Default values returned instead'
+    return s
 
 def darkenColor(h,level=1): # Takes in a hex color and returns a darkened version
     conversion = {'f':'d','e':'c','d':'b','c':'a','b':'9','a':'8','9':'7',
@@ -78,7 +88,7 @@ def darkenColor(h,level=1): # Takes in a hex color and returns a darkened versio
     if level <= 1: return out
     return darkenColor(out,level-1)
 
-def chunkifyString(s,l): # Chops up a string into lines of length l
+def chunkifyString(s,l): # Chops up a s into lines of length l
     out, row = [], ''
     for w in s.split():
         if len(w) + len(row) > l:
@@ -171,7 +181,7 @@ def replaceLambda(f,i,m=None,k=0): # Replaces all lambda atoms with the desired 
     elif isinstance(f,CustomFunction): # What to do if the HOF is a custom function
         return callBlockWithInputs(fillBlockWithInputs(f.dataString,list(map(lambda x: replaceLambda(x,i,m,k),f.slots))),f)
     elif isinstance(f,Function): # What to do if the HOF is a normal function
-        if f.name in ['random int','random float','random choice']:
+        if f.name in ['random int','random float','random choice']: # Cased for randomness
             pRand = (f.rid * (k+3)**2) % 1
             if f.name == 'random int':
                 lo = f.operands[0]()
@@ -203,7 +213,7 @@ def stringSplit(s,par=None): # Returns an Axis that splits up a string
             return Axis.Axis(*list(s))
         return Axis.Axis(*s.split(par))
     except Exception as e:
-        TopLevel.globalException(e)
+        KIMCHI.globalException(e)
 
 class Dragger(object): # Class of all draggable blocks
 
@@ -212,21 +222,21 @@ class Dragger(object): # Class of all draggable blocks
     fontSize = 17
     targetSize = 10
 
-    def exportBlock(self):
+    def exportBlock(self): # How to export any dragger as a string
         bString = [self.name,self.x,self.y]
         if isinstance(self,Function): bString += [i.exportBlock() if i != None else None for i in self.slots]
         return bString
 
     @staticmethod
-    def exportClones():
+    def exportClones(): # How to export ALL draggers as one giant string
         out = ''
-        for i in [TopLevel.VariableSlots] + Dragger.cloneList:
+        for i in [KIMCHI.VariableSlots] + Dragger.cloneList:
             if i.name == 'Create Function' or (i.name == 'Set Variables' and 'Set Variables' in out): continue
             if i.parent == None: out += 'v: ' + str(i.exportBlock()) + '\n'
         return out.strip()
     
     @staticmethod
-    def superGenesis(bString,parent=None):
+    def superGenesis(bString,parent=None): # How to create a dragger from a string
         if bString == None: return None
         b2d = blockLibrary[bString[0]]
         x, y = bString[1], bString[2]
@@ -237,7 +247,8 @@ class Dragger(object): # Class of all draggable blocks
         else:
             defaults = b2d.defaults
             slots = [None for i in range(len(b2d.defaults))]
-            if isinstance(b2d,CustomFunction): f = CustomFunction(name,value,x,y,False,defaults,slots,parent,b2d.color,b2d.dataString)
+            if isinstance(b2d,CustomFunction): f = CustomFunction(name,value,x,y,
+            False,defaults,slots,parent,b2d.color,b2d.dataString)
             else: f = eval(b2d.fType)(name,value,x,y,False,defaults,slots,parent)
             f.slots = [Dragger.superGenesis(i,f) for i in bString[3:]]
             f.getDimensions()
@@ -258,8 +269,10 @@ class Dragger(object): # Class of all draggable blocks
                         return IOAtom(self.value,x,y+app.scrollY2,False,self.name)
                     return Atom(self.value,x,y+app.scrollY2,False,self.name)
                 if type(self) == CustomFunction:
-                    return CustomFunction(self.name,self.value,x,y,False,self.defaults,[None for i in range(len(self.operands))],None,self.color,self.dataString)
-                return eval(self.fType)(self.name,self.value,x,y,False,self.defaults,[None for i in range(len(self.operands))],None)
+                    return CustomFunction(self.name,self.value,x,y,False,self.defaults,
+                    [None for i in range(len(self.operands))],None,self.color,self.dataString)
+                return eval(self.fType)(self.name,self.value,x,y,False,self.defaults,
+                [None for i in range(len(self.operands))],None)
         elif (x-self.x)**2 + (y+app.scrollY2-self.y)**2 < 100 or awaken: # Else, just move it (and bring to top)
             if self.name != 'Set Variables':
                 if type(app) == Sandbox:
@@ -271,8 +284,9 @@ class Dragger(object): # Class of all draggable blocks
             return self
 
     def __eq__(self,other): # Compares Draggers
-        try: return type(self) == type(other) and self.name == other.name and self.x == other.x and self.y == other.y and self.value == other.value
-        except: return False
+        try: return (type(self) == type(other) and self.name == other.name and 
+        self.x == other.x and self.y == other.y and self.value == other.value)
+        except: return False # In case self.value and other.value are both Draggers (happens with empty inputs)
 
     def FuncToString(self): # Converts Draggers into strings that can be read by custom functions
         if isinstance(self,Atom):
@@ -287,7 +301,7 @@ class Dragger(object): # Class of all draggable blocks
             return True
 
     def superSlotify(self): # Reset the slotting of items during a load
-        for i in Dragger.cloneList + [TopLevel.VariableSlots]:
+        for i in Dragger.cloneList + [KIMCHI.VariableSlots]:
             if isinstance(i,Function):
                 if i.name == 'Create Function':
                     continue
@@ -297,12 +311,12 @@ class Dragger(object): # Class of all draggable blocks
                     self.parent = i
                     i.slotify()
                     if i.name == 'Set Variables':
-                        TopLevel.Vars[slot] = self
+                        KIMCHI.Vars[slot] = self
                         blockLibrary[f'V{slot}'].value = self.value
                         for i in Dragger.cloneList:
                             for j in range(maxVars):
                                 if i.name == 'V'+str(j):
-                                    try: i.value = TopLevel.Vars[j]
+                                    try: i.value = KIMCHI.Vars[j]
                                     except: pass
 
 class Function(Dragger): # Class of all functions
@@ -317,12 +331,13 @@ class Function(Dragger): # Class of all functions
         self.getOperands()
         self.buffer = 5
         if self.cloneable: blockLibrary[self.name] = self
-        elif TopLevel.curMode == 2: Dragger.cloneList2.append(self)
-        elif TopLevel.curMode == 1: Dragger.cloneList.append(self)
+        elif KIMCHI.curMode == 2: Dragger.cloneList2.append(self)
+        elif KIMCHI.curMode == 1: Dragger.cloneList.append(self)
 
     def getDimensions(self): # Update dimensions as things are dragged in/out
         self.xMin = Dragger.targetSize + 10 + len(self.name) * Dragger.fontSize/2.3
-        self.xMax = max([self.xMin]+list(map(lambda a: self.xMin if a == None else a.xMax + Dragger.targetSize + 5, self.slots)))
+        self.xMax = max([self.xMin]+list(map(lambda a: self.xMin if a == None 
+        else a.xMax + Dragger.targetSize + 5, self.slots)))
         self.yMin = 2 * Dragger.targetSize
         self.yCords = [0]
         for i in range(len(self.slots)):
@@ -350,7 +365,7 @@ class Function(Dragger): # Class of all functions
                 return round(val,8)
             return val
         except Exception as e: # If inputs are invalid, return the defualt and print an error
-            TopLevel.globalException(e)
+            KIMCHI.globalException(e)
             return self.value(*map(lambda x: x(), self.defaults))
 
     def __repr__(self): # How to print for debugging:
@@ -380,13 +395,14 @@ class Function(Dragger): # Class of all functions
         for i in range(len(self.operands)):
             if self.slots[i] == None:
                 yCord = self.yCords[i+1] - self.yMin*1.1
-                canvas.create_oval(self.x+self.buffer,y1+yCord-app.scrollY2,self.x+self.buffer+Dragger.targetSize*2,y1+yCord+Dragger.targetSize*2-app.scrollY2,fill='White',width=0)
+                canvas.create_oval(self.x+self.buffer,y1+yCord-app.scrollY2,self.x+self.buffer+Dragger.targetSize*2,
+                y1+yCord+Dragger.targetSize*2-app.scrollY2,fill='White',width=0)
             elif isinstance(self.operands[i],Atom):
                 self.operands[i].drawAtom(canvas,app)
             elif isinstance(self.operands[i],Function):
                 self.operands[i].drawFunction(canvas,app)
 
-    def genesis(s,x,y): # Generates a new function from a string
+    def genesis(s,x,y): # Generates a pre-built function from a string
         parts = tuple(s.split(' | '))
         fType, name, func, defaultNames = parts
         func = eval(func)
@@ -403,7 +419,7 @@ class Function(Dragger): # Class of all functions
             if abs(i+self.y-y) < Dragger.targetSize:
                 return r-1
 
-    def slotify(self,allowUp=True): # Adjust x & y coordiantes of all children in refrence to parent
+    def slotify(self,allowUp=True): # Adjust x & y coordiantes of all children in refrence to parent (accordioning of inputs)
         for i in range(1,len(self.yCords)):
             if self.slots[i-1] != None:
                 self.slots[i-1].y = self.y + self.yCords[i] - 3
@@ -425,7 +441,7 @@ class Function(Dragger): # Class of all functions
                 elif child in Dragger.cloneList2:
                     Dragger.cloneList2.remove(child)
 
-class ArithmeticFunction(Function):
+class ArithmeticFunction(Function): # Subclass for all blue (math) functions
     color = '#49bcdf'
     def __init__(self,name,value,x,y,cloneable,defaults,slots,parent=None):
         super().__init__('ArithmeticFunction',name,value,x,y,cloneable,defaults,slots,parent)
@@ -434,7 +450,7 @@ class ArithmeticFunction(Function):
     def __call__(self,depth=0): # If being treated like a function, call the lambda expression
         try:
             if depth > 20: raise RecursionError
-            if self.name == 'random int':
+            if self.name == 'random int': # Cased for randomness
                 lo = self.operands[0]()
                 hi = self.operands[1]()
                 return int((self.rid * (hi-lo)) + lo)
@@ -451,16 +467,16 @@ class ArithmeticFunction(Function):
                     return round(val,8)
                 return val
         except Exception as e: # If inputs are invalid, return the defualt and print an error
-            TopLevel.globalException(e)
+            KIMCHI.globalException(e)
             return self.value(*map(lambda x: x(), self.defaults))
 
-class LetterFunction(Function):
+class LetterFunction(Function): # Subclass of all green (string) functions
     color = '#94df49'
     def __init__(self,name,value,x,y,cloneable,defaults,slots,parent=None):
         super().__init__('LetterFunction',name,value,x,y,cloneable,defaults,slots,parent)
         self.color = '#94df49'
 
-class PredicateFunction(Function):
+class PredicateFunction(Function): # Subclass of all purple (boolean) functions
     color = '#9079f6'
     def __init__(self,name,value,x,y,cloneable,defaults,slots,parent=None):
         super().__init__('PredicateFunction',name,value,x,y,cloneable,defaults,slots,parent)
@@ -475,19 +491,19 @@ class PredicateFunction(Function):
                 val = self.value(*map(lambda x: x(depth+1), self.operands))
             if isinstance(val,float):
                 return round(val,8)
-            return val
+            return bool(val)
         except Exception as e: # If inputs are invalid, return the defualt and print an error
             print(e)
-            TopLevel.globalException(e)
+            KIMCHI.globalException(e)
             return self.value(*map(lambda x: x(depth+1), self.defaults))
 
-class IterableFunction(Function):
+class IterableFunction(Function): # Subclass of all orange (list) functions
     color = '#ea5639'
     def __init__(self,name,value,x,y,cloneable,defaults,slots,parent=None):
         super().__init__('IterableFunction',name,value,x,y,cloneable,defaults,slots,parent)
         self.color = '#ea5639'
 
-class ControlFunction(Function):
+class ControlFunction(Function): # Subclass of all yellow (higher order) functions
     color = '#ea5639'
     def __init__(self,name,value,x,y,cloneable,defaults,slots,parent=None):
         super().__init__('ControlFunction',name,value,x,y,cloneable,defaults,slots,parent)
@@ -508,42 +524,46 @@ class ControlFunction(Function):
                 return round(val,8)
             return val
         except Exception as e: # If inputs are invalid, return the defualt and print an error
-            TopLevel.globalException(e)
+            KIMCHI.globalException(e)
             return self.value(*map(lambda x: x(), self.defaults))
 
-class VarSetFunction(Function):
+class VarSetFunction(Function): # Subclass to handle the pink Set Variables function
     color = '#e85f64'
     def __init__(self,name,vals):
-        super().__init__('VarSetFunction',name,None,165,20,False,TopLevel.Defaults,vals,None)
+        super().__init__('VarSetFunction',name,None,165,20,False,KIMCHI.Defaults,vals,None)
         self.color = '#e85f64'
         self.buffer = 35
 
     def wipeVariables(self): # Wipes the variable slots clean during a reset
-        TopLevel.Vars = [None for i in range(maxVars)]
+        KIMCHI.Vars = [None for i in range(maxVars)]
         self.slots = [None for i in range(maxVars)]
 
     def __call__(self,depth=0):
         pass
 
     def drawFunction(self,canvas,app): # Draws the variable setter
-        self.xMax = max([self.xMin]+list(map(lambda a: a.xMax + Dragger.targetSize + self.buffer if isinstance(a,Dragger) else 0, self.slots)))
+        self.xMax = max([self.xMin]+list(map(lambda a: a.xMax + Dragger.targetSize + 
+        self.buffer if isinstance(a,Dragger) else 0, self.slots)))
         x0, y0 = self.x - Dragger.targetSize, self.y - Dragger.targetSize
         x1, y1 = self.x + self.xMax + Dragger.targetSize, self.y + Dragger.targetSize
         y2 = y1  + self.ySize - self.yMin
         x2 = self.x + Dragger.targetSize
-        canvas.create_rectangle(self.x+2,y0-app.scrollY2+2,x1-2,y2-app.scrollY2-2,fill=self.color,width=2,outline=darkenColor(self.color))
+        canvas.create_rectangle(self.x+2,y0-app.scrollY2+2,x1-2,y2-app.scrollY2-2,fill=self.color,width=2,
+        outline=darkenColor(self.color))
         canvas.create_text(x2-3,self.y-app.scrollY2,anchor='w',text=self.name,font=f'Times {Dragger.fontSize}')
         for i in range(len(self.operands)):
-            canvas.create_text(self.x+self.buffer/2,self.y+self.yCords[i+1]-app.scrollY2,text=f'V{i}',font=f'Times {Dragger.fontSize-2}')
+            canvas.create_text(self.x+self.buffer/2,self.y+self.yCords[i+1]-app.scrollY2,text=f'V{i}',
+            font=f'Times {Dragger.fontSize-2}')
             if self.slots[i] == None:
                 yCord = self.yCords[i+1] - self.yMin*1.1 -app.scrollY2
-                canvas.create_oval(self.x+self.buffer,y1+yCord,self.x+self.buffer+Dragger.targetSize*2,y1+yCord+Dragger.targetSize*2,fill='White',width=0)
+                canvas.create_oval(self.x+self.buffer,y1+yCord,self.x+self.buffer+Dragger.targetSize*2,
+                y1+yCord+Dragger.targetSize*2,fill='White',width=0)
             elif isinstance(self.operands[i],Atom):
                 self.operands[i].drawAtom(canvas,app)
             elif isinstance(self.operands[i],Function):
                 self.operands[i].drawFunction(canvas,app)
 
-class GenesisFunction(Function):
+class GenesisFunction(Function): # Subclass to handle the creation of a new function
     color = '#e85f64'
     curName = ''
     using = 0
@@ -573,7 +593,7 @@ class GenesisFunction(Function):
             elif isinstance(self.operands[i],Function):
                 self.operands[i].drawFunction(canvas,app)
 
-class CustomFunction(Function):
+class CustomFunction(Function): # Subclass of all custom functions
     def __init__(self,name,value,x,y,cloneable,defaults,slots,parent=None,color=None,dataString=''):
         super().__init__('CustomFunction',name,value,x,y,cloneable,defaults,slots,parent)
         self.color = color
@@ -585,28 +605,28 @@ class CustomFunction(Function):
         try:
             if depth > 20: raise RecursionError
             if CreationMode.frankenstein != None and self.name == CreationMode.frankenstein.name:
-                me = TopLevel.FuncSlots.slots[0].FuncToString()
+                me = KIMCHI.FuncSlots.slots[0].FuncToString()
             else:
                 me = blockLibrary[self.name].dataString
             val = callBlockWithInputs(fillBlockWithInputs(me,list(map(lambda x: x() if str(x) not in ['None','Null'] else None, self.slots))),self)
             return val
         except Exception as e:
-            TopLevel.globalException(e)
+            KIMCHI.globalException(e)
             return None
 
-    def __hash__(self):
+    def __hash__(self): # How to has for the CustomFunctions set
         return hash(self.name)
 
-    def exportFunction(self):
+    def exportFunction(self): # How to export a Custom Function definition
         return (self.name,self.color,len(self.slots),self.dataString)
 
     @staticmethod
-    def uberGenesis(s):
+    def uberGenesis(s): # How to import a Custom Funciton definition
         n, c, i, f = s
         new = CustomFunction(n,None,25,sorted(list(blockLibrary.values()),key=lambda x: x.y)[-1].y+2*Dragger.targetSize,
         True,[blockLibrary['Null'] for i in range(i)],[None for j in range(i)],None,c,f)
 
-class Atom(Dragger): # Class of all atoms
+class Atom(Dragger): # Class of all Atoms
 
     def __init__(self,value,x,y,cloneable,name,parent=None):
         self.value, self.x, self.y, self.cloneable, self.name, self.parent = value, x, y, cloneable, name, parent
@@ -618,8 +638,8 @@ class Atom(Dragger): # Class of all atoms
                 ioLibrary[self.name] = self
             else:
                 blockLibrary[self.name] = self
-        elif TopLevel.curMode == 2: Dragger.cloneList2.append(self)
-        elif TopLevel.curMode == 1: Dragger.cloneList.append(self)
+        elif KIMCHI.curMode == 2: Dragger.cloneList2.append(self)
+        elif KIMCHI.curMode == 1: Dragger.cloneList.append(self)
         
     def getColor(self): # Does exactly what is sounds like
         if type(self) == IOAtom or (self.name[0] == 'V' and len(self.name)>1): self.color = '#e85f64'
@@ -672,11 +692,11 @@ class VarAtom(Atom): # Subclass of Atom to handle variable atoms
     def __call__(self,depth=0): # Try-except to prevent circular logic (V2 = V1 but V1 = V2)
         try:
             if depth > 20: raise RecursionError
-            return TopLevel.Vars[int(self.name[1:])](depth+1)
+            return KIMCHI.Vars[int(self.name[1:])](depth+1)
         except:
             return None
 
-class IOAtom(Atom):
+class IOAtom(Atom): # Subclass of all input atoms used for function creation
 
     def __init__(self,value,x,y,cloneable,name,parent=None):
         super().__init__(value,x,y,cloneable,name,parent)
@@ -701,7 +721,7 @@ class IOAtom(Atom):
         canvas.create_oval(x0,y0-app.scrollY2,x2,y1-app.scrollY2,fill=clickColor,width=0)
         canvas.create_text(x2+3,self.y-app.scrollY2,anchor='w',text=f'Input {int(self.name[1])+1}',font=f'Times {Dragger.fontSize}')
 
-    def getColor(self): # Pink if useable, grey if not (a 3-input function can only use inputs 0, 1 & 2)
+    def getColor(self): # Pink if useable, grey if not (a 3-input function can only use inputs 1, 2 & 3)
         if int(self.name[1]) < GenesisFunction.using: 
             self.color = '#e85f64'
         else:
@@ -729,30 +749,30 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
         self.app._canvas.pack_forget()
         self.canvas = Canvas(self.app._root,width=1000,height=800)
         self.canvas.pack()
-        TopLevel.globalCanvas = self.canvas
-        TopLevel.curMode = 1
+        KIMCHI.globalCanvas = self.canvas
+        KIMCHI.curMode = 1
         for i in Dragger.cloneList: i.superSlotify() # Prevents functions from "sticking" when loaded
 
     def modeDeactivated(self): # When deactivated, re-impose the graphics-file canvas
         self.canvas.pack_forget()
         self.app._canvas.pack()
 
-    def pressingButtons(self,x,y):
+    def pressingButtons(self,x,y): # Is mouse currently clicking on a button
         options = [self.app.splashMode,self.app.splashMode,self.app.splashMode]
         yVals = [575, 625, 675, 725, 775]
         for i in range(5):
             if (x > 590 or ((x-590)**2 + (y-yVals[i])**2) < 625) and x < 630 and y < yVals[i]+25 and y > yVals[i]-25:
-                if i == 0: TopLevel.newSave()
+                if i == 0: KIMCHI.newSave()
                 elif i == 1: self.background += 1; self.background %= self.backgroundMax
                 elif i == 2: self.getFunctionInfo()
                 elif i == 3: self.app.setActiveMode(self.app.splashMode)
                 elif i == 4: 
                     if popupBox('Type DELETE to clear the sandbox') == 'DELETE':
-                        TopLevel.wipeBlocks()
-                        TopLevel.VariableSlots.getDimensions()
+                        KIMCHI.wipeBlocks()
+                        KIMCHI.VariableSlots.getDimensions()
                         DrawingMode.dots = {}
 
-    def getFunctionInfo(self):
+    def getFunctionInfo(self): # Prompt interface for creating a new function & entering function creation mode
         if not CreationMode.done:
             self.app.setActiveMode(self.app.creationMode)
         else:
@@ -768,7 +788,8 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
                     if fType == 'control':
                         nextStep = popupBox(f'You cannot make control functions.\nPress "ok" to try agian.')
                     else:
-                        nextStep = popupBox(f'"{fType}" is not a valid function type.\nValid types: arithmetic, predicate, letter, iterable\nPress "ok" to try agian.')
+                        nextStep = popupBox(f'"{fType}" is not a valid function type.\nValid types: \
+                            arithmetic, predicate, letter, iterable\nPress "ok" to try agian.')
                     if nextStep != None: self.getFunctionInfo()
                 else:
                     fInpt = popupBox(f'How many inputs does {fName} have?')
@@ -784,12 +805,12 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
                         for block in ioLibrary.values(): block.getColor()
                         CreationMode.done = False
                         CreationMode.megaGenesis(*self.app.funcStrings)
-                        TopLevel.FuncSlots.slots = [None]
-                        TopLevel.FuncSlots.getDimensions()
+                        KIMCHI.FuncSlots.slots = [None]
+                        KIMCHI.FuncSlots.getDimensions()
                         Dragger.cloneList2 = []
                         self.app.setActiveMode(self.app.creationMode)
 
-    def mousePressed(self,event): # Check for scrolling & dragging Atoms/Functions
+    def mousePressed(self,event): # Check for scrolling & dragging Atoms/Functions, also adjust variables if an item is removed
         self.pressingButtons(event.x,event.y)
         if event.x < 10: self.scrolling = True
         elif event.x < 640 and event.x > 630: self.scrolling2 = True
@@ -807,12 +828,12 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
                         for i in range(len(self.holding.parent.slots)):
                             if self.holding.parent.slots[i] == self.holding:
                                 if self.holding.parent.name == 'Set Variables':
-                                    TopLevel.Vars[i] = None
+                                    KIMCHI.Vars[i] = None
                                     blockLibrary[f'V{i}'].value = None
                                     for k in Dragger.cloneList:
                                         for j in range(maxVars):
                                             if k.name == 'V'+str(j):
-                                                try: k.value = TopLevel.Vars[j]
+                                                try: k.value = KIMCHI.Vars[j]
                                                 except: pass
                                 self.holding.parent.slots[i] = None
                         self.holding.parent.slotify()
@@ -822,7 +843,7 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
         if self.scrolling:
             self.scrollY = max(0,event.y)/self.height * self.scrollMax
         if self.scrolling2:
-            self.scrollMax2 = min(800,TopLevel.VariableSlots.ySize)
+            self.scrollMax2 = min(800,KIMCHI.VariableSlots.ySize)
             self.scrollY2 = max(0,event.y)/self.height * self.scrollMax2
         if self.scrolling3:
             self.scrollMax3 = min(670,15*Sandbox.VarString.count('\n'))
@@ -833,7 +854,7 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
         if isinstance(self.holding,Function):
             self.holding.slotify()
 
-    def mouseReleased(self,event): # Stop scrolling & release dragged Atoms/Funcitons
+    def mouseReleased(self,event): # Stop scrolling & release dragged Atoms/Funcitons, also adjust variables if an item is added
         self.scrolling = False
         self.scrolling2 = False
         self.scrolling3 = False
@@ -847,7 +868,7 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
             Dragger.cloneList.remove(self.holding)
             if isinstance(self.holding,Function): self.holding.killChildren()
         else:
-            for i in Dragger.cloneList + [TopLevel.VariableSlots]:
+            for i in Dragger.cloneList + [KIMCHI.VariableSlots]:
                 if isinstance(i,Function):
                     if i.name == 'Create Function': continue
                     slot = i.insideSlot(event.x,event.y+self.scrollY2)
@@ -856,12 +877,12 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
                         self.holding.parent = i
                         i.slotify()
                         if i.name == 'Set Variables':
-                            TopLevel.Vars[slot] = self.holding
+                            KIMCHI.Vars[slot] = self.holding
                             blockLibrary[f'V{slot}'].value = self.holding.value
                             for i in Dragger.cloneList:
                                 for j in range(maxVars):
                                     if i.name == 'V'+str(j):
-                                        try: i.value = TopLevel.Vars[j]
+                                        try: i.value = KIMCHI.Vars[j]
                                         except: pass
                         break
         self.holding = [None]
@@ -877,13 +898,13 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
         canvas.create_rectangle(990,0,1000,self.height*0.8375,fill='#d1d1d2',width=0)
         canvas.create_oval(991,y4-3,997,y4+3,fill='#a8a7a9',width=0)
 
-    def drawEvaluator(self,canvas):
+    def drawEvaluator(self,canvas): # Draw the variable values on the right hand of the screen (with wrapping)
         x0 = 660
         y0 = 10 - self.scrollY3
         out = ['Variable Evaluator:']
         coloredText = 'Green'
         for i in range(maxVars):
-            v0 = TopLevel.Vars[i]
+            v0 = KIMCHI.Vars[i]
             if v0 == None: out.append(f'V{i} = Null'); continue
             v = v0()
             if v == None: out.append(f'V{i} = Null'); continue
@@ -894,7 +915,7 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
         Sandbox.VarString = '\n'.join(out)
         canvas.create_text(x0,y0,anchor='nw',text=Sandbox.VarString,fill=coloredText,font='Times 18')
 
-    def drawButtons(self,canvas):
+    def drawButtons(self,canvas): # Does exactly what it sounds like
         r, x0, x1 = 25, 590, 630
         y4, y0, y1, y2, y3, y5 = 550, 600, 650, 700, 750, 800
         xA, yA = (x0+x1-12)/2, y1 + 6
@@ -925,47 +946,50 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
         canvas.create_oval(x0-r/1.5,y2,x0+r/1.5,y3,width=0,fill=c3B)
         canvas.create_polygon(x0,y2+20,x0,y3-10,x1-15,y3-10,x1-15,y2+20,xA-1,y2+10,width=0,fill=c3A)
 
-    def drawTartan(self,canvas,*stripes):
+    def drawTartan(self,canvas,*stripes): # Draws a Tartan pattern based on coordinates defining the 2 corners, width, and color
         for x0,y0,x1,y1,c,w in stripes:
             if y0 < y1: xA, yA, xB, yB, xC, yC, xD, yD = x0+w, y0-w, x1+w, y1-w, x1-w, y1+w, x0-w, y0+w
             else: xA, yA, xB, yB, xC, yC, xD, yD = x0+w, y0+w, x1+w, y1+w, x1-w, y1-w, x0-w, y0-w
             canvas.create_polygon(xA,yA,xB,yB,xC,yC,xD,yD,fill=c,width=0)
 
-    def drawBackground(self,canvas):
-        if self.background < 2: canvas.create_rectangle(150,0,640,self.height,fill='Black',width=0)
-        if self.background == 1: 
+    def drawBackground(self,canvas): # Draw background depending on which one is currently being toggled
+        if self.background < 2: canvas.create_rectangle(150,0,640,self.height,fill='Black',width=0) # Black background
+        if self.background == 1: # Rainbow pinwheel spiral
             dT = 2.95
             hexaColors = ['#ff99aa','#ffbb99','#ffff99','#99ffaa','#99aaff','#ffaaff']
-            for i in range(153): canvas.create_line(400+2*i*math.cos(math.pi*i/dT),400+2*i*math.sin(math.pi*i/dT),400+2*i*math.cos(math.pi*(i+1)/dT),400+2*i*math.sin(math.pi*(i+1)/dT),width=3,fill=hexaColors[i%6])
-        elif self.background == 2: 
+            for i in range(153): canvas.create_line(400+2*i*math.cos(math.pi*i/dT),400+2*i*math.sin(math.pi*i/dT),
+            400+2*i*math.cos(math.pi*(i+1)/dT),400+2*i*math.sin(math.pi*(i+1)/dT),width=3,fill=hexaColors[i%6])
+        elif self.background == 2: # Toothpick Curve
             for x,y in self.app.vBars: canvas.create_line(x,y-10,x,y+10,width=3)
             for x,y in self.app.hBars: canvas.create_line(x-10,y,x+10,y,width=3)
-        elif self.background == 3: canvas.create_line(*functools.reduce(lambda x,y: x+y,self.app.dragonCurve),width=2)
-        elif self.background == 4: self.drawTartan(canvas,(200,-100,700,400,'#ffff99',7),(0,0,700,700,'#99aaff',10),(0,900,700,200,'#99aaff',7),(0,800,700,100,'#ffff99',2),(0,775,700,75,'#ffff99',2),(400,-50,700,250,'#99aaff',20),(0,600,700,-100,'#ffff99',17),(0,530,700,-180,'#ffff99',4),(0,380,700,1080,'#99aaff',2))
-        elif self.background == 5: 
+        elif self.background == 3: canvas.create_line(*functools.reduce(lambda x,y: x+y,self.app.dragonCurve),width=2) # Dragon Curve
+        elif self.background == 4: self.drawTartan(canvas,(200,-100,700,400,'#ffff99',7),(0,0,700,700,'#99aaff',10),
+        (0,900,700,200,'#99aaff',7),(0,800,700,100,'#ffff99',2),(0,775,700,75,'#ffff99',2),(400,-50,700,250,'#99aaff',20),
+        (0,600,700,-100,'#ffff99',17),(0,530,700,-180,'#ffff99',4),(0,380,700,1080,'#99aaff',2))
+        elif self.background == 5: # Blue/green polka dota
             for i in self.app.polka: self.canvas.create_oval(i[0]-i[2],i[1]-i[2],i[0]+i[2],i[1]+i[2],fill=i[3],width=0)
-        elif self.background == 6: 
+        elif self.background == 6: # Red/brown arrow heads
             for i in self.app.diamonds: self.canvas.create_polygon(i[0]-i[2],i[1],i[0],i[1]+i[2],i[0]+i[2],i[1],i[0],i[1]+i[2]/2,fill=i[3],width=0)
-        elif self.background == 7:
+        elif self.background == 7: # Red/Yellow/Blue isometric cubes
             for i in self.app.isoms: self.drawIsometric(canvas,i[0],i[1])
-        elif self.background == 8:
+        elif self.background == 8: # Purple/Blue isometric illusion
             for i in self.app.isoms: self.drawIsometric2(canvas,i[0],i[1])
-        elif self.background == 9: self.canvas.create_image(400,400,image=self.app.kLogo)
-        elif self.background == 10:
+        elif self.background == 9: self.canvas.create_image(400,400,image=self.app.kLogo) # An illustration of KIMCHEE
+        elif self.background == 10: # The surprise
             for x,y in DrawingMode.dots:
                 r,c = DrawingMode.dots[(x,y)]
                 if c[1] == c[3] and c[3] == c[5] and c[5] == 'f': c = 'White'
                 canvas.create_oval(x-r,y-r,x+r,y+r,fill=c,width=0)
-        canvas.create_rectangle(640,0,self.width,self.height,fill='Black',width=0)
+        canvas.create_rectangle(640,0,self.width,self.height,fill='Black',width=0) # Background for variable evaluation mode
 
-    def drawIsometric(self,canvas,x2,y2):
+    def drawIsometric(self,canvas,x2,y2): # Draw an isometric cube for background 7
         x0, x1, x3, x4 = x2-40, x2-20, x2+20, x2+40
         y0, y1, y3, y4, y5, y6 = y2 - 15, y2-10, y2 + 5, y2+10, y2+25, y2+30
         canvas.create_polygon(x0,y1,x1,y0,x2,y1,x3,y0,x4,y1,x2,y2,fill=darkenColor('#ff99aa',2),width=0)
         canvas.create_polygon(x0,y1,x0,y3,x1,y4,x1,y5,x2,y6,x2,y2,fill=darkenColor('#ffff99',0),width=0)
         canvas.create_polygon(x4,y1,x4,y3,x3,y4,x3,y5,x2,y6,x2,y2,fill=darkenColor('#99aaff',2),width=0)
 
-    def drawIsometric2(self,canvas,x2,y3):
+    def drawIsometric2(self,canvas,x2,y3): # Draw an isometric pseudo-cube for background 8
         x0, x1, x3, x4 = x2-38, x2-18, x2+18, x2+38
         y6, y5, y4, y2, y1, y0 = y3 - 15, y3-10, y3 + 5, y3+10, y3+25, y3+30
         canvas.create_polygon(x0,y1,x1,y0,x2,y1,x3,y0,x4,y1,x2,y2,fill=darkenColor('#99aaff',2),width=0)
@@ -979,7 +1003,7 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
         self.drawLibraryScroll(self.canvas)
         self.drawEvaluator(self.canvas)
         self.drawButtons(self.canvas)
-        TopLevel.VariableSlots.drawFunction(self.canvas,self)
+        KIMCHI.VariableSlots.drawFunction(self.canvas,self)
         for book in blockLibrary.values():
             if isinstance(book,Atom):
                 book.drawLibraryAtom(self.canvas,self)
@@ -993,10 +1017,10 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
             else:
                 clone.drawFunction(self.canvas,self)
 
-class CreationMode(Sandbox):
+class CreationMode(Sandbox): # Subclass of Sandbox (since it's almost identical) used for creating Custom Functions
 
-    done = True
-    frankenstein = None
+    done = True # Used to know if a function is still being worked on or if it is done and a new one is being created
+    frankenstein = None # The function currently being worked on
 
     @staticmethod
     def megaGenesis(name,typ,inputs):
@@ -1012,7 +1036,6 @@ class CreationMode(Sandbox):
         self.scrollHeight = self.height
         self.scrolling = False
         self.scrolling2 = False
-        self.fStrings = self.app.funcStrings
         self.background = 0
         self.backgroundMax = self.app.sandboxMode.backgroundMax
 
@@ -1021,10 +1044,11 @@ class CreationMode(Sandbox):
         self.app._canvas.pack_forget()
         self.canvas = Canvas(self.app._root,width=1000,height=800)
         self.canvas.pack()
-        TopLevel.globalCanvas = self.canvas
-        TopLevel.curMode = 2
+        KIMCHI.globalCanvas = self.canvas
+        KIMCHI.curMode = 2
         for i in blockLibrary.values():
             i.y -= 140
+        self.fStrings = self.app.funcStrings
 
     def modeDeactivated(self): # When deactivated, re-impose the graphics-file canvas
         self.canvas.pack_forget()
@@ -1040,8 +1064,8 @@ class CreationMode(Sandbox):
                 if i == 0: self.background += 1; self.background %= self.backgroundMax
                 elif i == 1:
                     if popupBox('Type DONE to finish the function (no takebacks!)') == 'DONE':
-                        if TopLevel.FuncSlots.slots[0] != None:
-                            CreationMode.frankenstein.dataString = TopLevel.FuncSlots.slots[0].FuncToString()
+                        if KIMCHI.FuncSlots.slots[0] != None:
+                            CreationMode.frankenstein.dataString = KIMCHI.FuncSlots.slots[0].FuncToString()
                         else:
                             CreationMode.frankenstein.dataString = 'Null'
                         CreationMode.done = True
@@ -1077,7 +1101,7 @@ class CreationMode(Sandbox):
         if self.scrolling:
             self.scrollY = max(0,event.y)/self.height * self.scrollMax
         if self.scrolling2:
-            self.scrollMax2 = min(800,TopLevel.VariableSlots.ySize)
+            self.scrollMax2 = min(800,KIMCHI.VariableSlots.ySize)
             self.scrollY2 = max(0,event.y)/self.height * self.scrollMax2
         if self.holding == [None]:
             return
@@ -1102,7 +1126,7 @@ class CreationMode(Sandbox):
             if isinstance(self.holding,Function):
                 self.holding.killChildren()
         else:
-            for i in Dragger.cloneList2 + [TopLevel.FuncSlots]:
+            for i in Dragger.cloneList2 + [KIMCHI.FuncSlots]:
                 if isinstance(i,Function):
                     slot = i.insideSlot(event.x,event.y+self.scrollY2)
                     if slot != None:
@@ -1120,7 +1144,7 @@ class CreationMode(Sandbox):
         canvas.create_rectangle(630,0,640,self.height,fill='#d1d1d2',width=0)
         canvas.create_oval(632,y3-3,638,y3+3,fill='#a8a7a9',width=0)
 
-    def drawEvaluator(self,canvas):
+    def drawEvaluator(self,canvas): # Draw the information of the function currently being worked on
         x0 = self.width * 0.81
         y0 = 30
         out = ['Function Creator:']
@@ -1137,7 +1161,7 @@ class CreationMode(Sandbox):
         self.drawLibraryScroll(self.canvas)
         self.drawEvaluator(self.canvas)
         self.drawButtons(self.canvas)
-        TopLevel.FuncSlots.drawFunction(self.canvas,self)
+        KIMCHI.FuncSlots.drawFunction(self.canvas,self)
         for book in list(ioLibrary.values()) + list(blockLibrary.values()):
             if isinstance(book,Atom):
                 if type(book) != VarAtom:
@@ -1155,7 +1179,7 @@ class SplashMode(Mode): # The colorful splash screen mode
         self.app._canvas.pack_forget()
         self.canvas = Canvas(self.app._root,width=1000,height=800)
         self.canvas.pack()
-        TopLevel.globalCanvas = self.canvas
+        KIMCHI.globalCanvas = self.canvas
         self.mX, self.mY = 0,0
         self.mystery = 5
         self.quandry = False
@@ -1182,10 +1206,10 @@ class SplashMode(Mode): # The colorful splash screen mode
     def mouseMoved(self,event): # Used to detect hovering over buttons
         self.mX, self.mY = event.x, event.y
 
-    def mousePressed(self,event):
+    def mousePressed(self,event): # Is a buttton currently being pressed
         if event.x > 421 and event.x < 579:
             if self.quandry: pass
-            elif event.y > 150 and event.y < 350: self.quandry = True
+            elif event.y > 150 and event.y < 350: self.quandry = True # Activate the surprise
             elif event.y > 606 and event.y < 644: self.app.setActiveMode(self.app.sandboxMode)
             elif event.y > 656 and event.y < 694: self.app.setActiveMode(self.app.loadMode)
             elif event.y > 706 and event.y < 744: self.app.setActiveMode(self.app.tutorialMode)
@@ -1216,14 +1240,14 @@ class SplashMode(Mode): # The colorful splash screen mode
         color = '#' + hex(red)[2:] + hex(green)[2:] + hex(blue)[2:]
         canvas.create_polygon(x1,y1,x2,y2,x3,y3,x4,y4,fill=color,width=0)
 
-    def buttonCords(self,x,y,w,h):
+    def buttonCords(self,x,y,w,h): # Return coordinates for an oval-rectangle hybrid (bc smooth polygons are TOO oval-like)
         x0, y0 = x - w, y + h
         x1, y1 = x + w, y + h
         x2, y2 = x + w, y - h
         x3, y3 = x - w, y - h
         return (x0-5,y0-5),(x0,y0),(x0+5,y0+5),(x1-5,y1+5),(x1,y1),(x1+5,y1-5),(x2+5,y2+5),(x2,y2),(x2-5,y2-5),(x3+5,y3-5),(x3,y3),(x3-5,y3+5)
 
-    def drawButtons(self,canvas):
+    def drawButtons(self,canvas): # Does exactly what it sounds like
         if self.mX > 421 and self.mX < 579:
             if self.mY > 606 and self.mY < 644: colors = [self.hoverColor,'White','White',]
             elif self.mY > 656 and self.mY < 694: colors = ['White',self.hoverColor,'White']
@@ -1252,7 +1276,7 @@ class LoadMode(Mode):
         self.app._canvas.pack_forget()
         self.canvas = Canvas(self.app._root,width=1000,height=800)
         self.canvas.pack()
-        TopLevel.globalCanvas = self.canvas
+        KIMCHI.globalCanvas = self.canvas
         self.allFiles = getKimchiFiles()
         self.carousel = 0
         self.kF = []
@@ -1275,7 +1299,7 @@ class LoadMode(Mode):
         self.canvas.pack_forget()
         self.app._canvas.pack()
 
-    def mouseMoved(self,event):
+    def mouseMoved(self,event): # Detects if an buttton is being hovered over
         if event.x < 200 or event.x > 600 or event.y < 200 or event.y > 600 or len(self.kF) == 0:
             self.hovering = -1
             return
@@ -1285,7 +1309,7 @@ class LoadMode(Mode):
                 return
         self.hovering = -1
 
-    def mousePressed(self,event):
+    def mousePressed(self,event): # Detects if an option is being selected or a button is being pressed
         if event.x > 600 and event.x < 650 and event.y > 560 and event.y < 600:
             self.carousel += 1
             self.carousel %= len(self.kF)
@@ -1293,7 +1317,7 @@ class LoadMode(Mode):
             if event.x > 200 and event.x < 350:
                 self.app.setActiveMode(self.app.splashMode)
             elif event.x > 400 and event.x < 550 and self.clicked != -1:
-                TopLevel.loadFile(self.kF[self.carousel][self.clicked])
+                KIMCHI.loadFile(self.kF[self.carousel][self.clicked])
                 Sandbox.scrollMax = (len(blockLibrary)+len(customFunctions)) * Dragger.targetSize * 1.5
                 self.app.setActiveMode(self.app.sandboxMode)
         elif event.x < 200 or event.x > 600 or event.y < 200 or event.y > 600:
@@ -1350,8 +1374,8 @@ class TutorialMode(Mode): # Help screen
         self.scrollingDown = False
         self.timerDelay = 2 
 
-    def modeActivated(self):
-        TopLevel.curMode == 'T'
+    def modeActivated(self): # Reset the demo blocks
+        KIMCHI.curMode == 'T'
         letterSamples = 'abCdEFXyztTP'
         listSamples = ['Q',2,'S',None,'o',3,'V',0,'U',1,-1,10]
         controlSamples = [chr(955),1,2,3,4,5,6,chr(955),7,8,9,10]
@@ -1368,7 +1392,8 @@ class TutorialMode(Mode): # Help screen
         self.sampleBlocks += [Atom(False,200,1180,False,'False'),Atom(True,300,1180,False,'False')]
         self.sampleBlocks += [IterableFunction('3-list',lambda x,y,z: Axis.Axis(x,y,z),200,1250,False,[blockLibrary['Null'] for i in range(3)],[None,None,None])]
         self.sampleBlocks += [ArithmeticFunction('*',lambda x,y: x*y,200,1355,False,[blockLibrary['0'] for i in range(2)],[None,None])]
-        self.sampleBlocks += [Atom(controlSamples[i],300+60*(i%4),1255+25*(i%3),False,f'{controlSamples[i]}') if controlSamples[i] != chr(955) else Atom(None,300+60*(i%4),1255+25*(i%3),False,f'{controlSamples[i]}') for i in range(12)]
+        self.sampleBlocks += [Atom(controlSamples[i],300+60*(i%4),1255+25*(i%3),False,f'{controlSamples[i]}') if controlSamples[i] != chr(955) 
+        else Atom(None,300+60*(i%4),1255+25*(i%3),False,f'{controlSamples[i]}') for i in range(12)]
 
     def timerFired(self): # Increment the animation
         self.time += 5
@@ -1440,11 +1465,12 @@ class TutorialMode(Mode): # Help screen
         blocks8 = chunkifyString(f'''
         PPS: If none of the background options are exciting to you, try clicking on 
         the KIMCHI text on the home screen.''',90)
-        for i in blocks1.splitlines() + blocks2.splitlines() + blocks3.splitlines() + [''] + blocks4.splitlines() + ([''] * 8) + blocks5.splitlines() + ([''] * 29) + blocks6.splitlines() + [''] + blocks7.splitlines() + [''] + blocks8.splitlines():
+        for i in [blocks1.splitlines() + blocks2.splitlines() + blocks3.splitlines() + [''] + blocks4.splitlines() + ([''] * 8) 
+        + blocks5.splitlines() + ([''] * 29) + blocks6.splitlines() + [''] + blocks7.splitlines() + [''] + blocks8.splitlines()]:
             out.append({'x':30,'y':out[-1]['y']+20,'text':i,'font':'Times 16','anchor':'w','fill':'Black'})
         return out
 
-    def mousePressed(self,event):
+    def mousePressed(self,event): # Detect if a demo block is being clicked or a button is being pressed
         if event.x > 950 and event.y < 60: self.app.setActiveMode(self.app.splashMode)
         for i in self.sampleBlocks:
             contact = i.touching(event.x,event.y,self)
@@ -1460,7 +1486,7 @@ class TutorialMode(Mode): # Help screen
                     self.sampleBlocks.append(self.sampleBlocks.pop(self.sampleBlocks.index(contact)))
                 return
 
-    def mouseDragged(self,event):
+    def mouseDragged(self,event): # Move a demo block if it is being dragged
         if self.holding == [None]: return
         self.holding.x = event.x
         self.holding.y = event.y + self.scrollY2
@@ -1483,13 +1509,13 @@ class TutorialMode(Mode): # Help screen
                         break
         self.holding = [None]
 
-    def mouseMoved(self,event):
+    def mouseMoved(self,event): # Sidescroll up/down
         self.my = event.y
         if event.y < 100 and self.scrollY > 0 and event.x < 800: self.scrollingUp = True; self.scrollingDown = False
         elif event.y > 700 and self.scrollY < self.scrollM and event.x < 800: self.scrollingUp = False; self.scrollingDown = True
         else: self.scrollingUp = False; self.scrollingDown = False
     
-    def drawDemoEval(self,canvas):
+    def drawDemoEval(self,canvas): # Draw the outputs to the demo blocks
         operands = self.sampleBlocks[0].operands
         canvas.create_text(600,710-self.scrollY,anchor='w',text=f'Mystery({operands[0]},{operands[1]})',fill=self.prism,font='Times 20 bold')
         canvas.create_text(600,730-self.scrollY,anchor='w',text=f'= {self.sampleBlocks[0]()}',fill=self.prism,font='Times 20 bold')
@@ -1497,12 +1523,14 @@ class TutorialMode(Mode): # Help screen
         canvas.create_text(600,910-self.scrollY,anchor='w',text=f'Quandry({operands2[0]})',fill=self.prism,font='Times 20 bold')
         canvas.create_text(600,930-self.scrollY,anchor='w',text=f'= {self.sampleBlocks[1]()}',fill=self.prism,font='Times 20 bold')
         operands3 = self.sampleBlocks[2].operands
-        canvas.create_text(600,1010-self.scrollY,anchor='w',text=chunkifyString(f'Enigma({operands3[0]()},{operands3[1]},{operands3[2]})',27)+'\n'+chunkifyString(f'= {self.sampleBlocks[2]()}',27),fill=self.prism,font='Times 20 bold')
+        canvas.create_text(600,1010-self.scrollY,anchor='w',text=chunkifyString(f'Enigma({operands3[0]()},{operands3[1]},{operands3[2]})',27)
+        +'\n'+chunkifyString(f'= {self.sampleBlocks[2]()}',27),fill=self.prism,font='Times 20 bold')
         operands4 = self.sampleBlocks[3].operands
         canvas.create_text(600,1160-self.scrollY,anchor='w',text=f'Riddle({operands4[0]},{operands4[1]})',fill=self.prism,font='Times 20 bold')
         canvas.create_text(600,1180-self.scrollY,anchor='w',text=f'= {self.sampleBlocks[3]()}',fill=self.prism,font='Times 20 bold')
         operands5 = self.sampleBlocks[4].operands
-        canvas.create_text(600,1260-self.scrollY,anchor='w',text=chunkifyString(f'Riddle({operands5[0]},{operands5[1]()})',27)+'\n'+chunkifyString(f'= {self.sampleBlocks[4]()}',27),fill=self.prism,font='Times 20 bold')
+        canvas.create_text(600,1260-self.scrollY,anchor='w',text=chunkifyString(f'Riddle({operands5[0]},{operands5[1]()})',27)+'\n'
+        +chunkifyString(f'= {self.sampleBlocks[4]()}',27),fill=self.prism,font='Times 20 bold')
 
     def redrawAll(self,canvas):
         for i in self.textList:
@@ -1524,7 +1552,7 @@ class TutorialMode(Mode): # Help screen
 
 class DrawingMode(Mode): # Mode for drawing a custom background
 
-    dots = {}
+    dots = {} # Stores all the dots drawn in this mode (cant just use self. because the exporting function is a static method)
 
     def appStarted(self):
         self.rY = 190
@@ -1538,14 +1566,14 @@ class DrawingMode(Mode): # Mode for drawing a custom background
     def modeActivated(self):
         self.dotDict = DrawingMode.dots
 
-    def buttonCords(self,x,y,w,h):
+    def buttonCords(self,x,y,w,h): # Same as last time
         x0, y0 = x - w, y + h
         x1, y1 = x + w, y + h
         x2, y2 = x + w, y - h
         x3, y3 = x - w, y - h
         return (x0-5,y0-5),(x0,y0),(x0+5,y0+5),(x1-5,y1+5),(x1,y1),(x1+5,y1-5),(x2+5,y2+5),(x2,y2),(x2-5,y2-5),(x3+5,y3-5),(x3,y3),(x3-5,y3+5)
 
-    def mouseDragged(self,event):
+    def mouseDragged(self,event): # Draw new dots (or erase)
         if event.x > 31 and event.x < 43 and abs(event.y-400) < 100: self.rY = min(190,max(0,event.y-300))
         elif event.x > 54 and event.x < 66 and abs(event.y-400) < 100: self.gY = min(190,max(0,event.y-300))
         elif event.x > 77 and event.x < 89 and abs(event.y-400) < 100: self.bY = min(190,max(0,event.y-300))
@@ -1557,11 +1585,11 @@ class DrawingMode(Mode): # Mode for drawing a custom background
         else: self.dotDict[(event.x,event.y)] = (self.size,self.cColor)
         self.cColor = rgb2hex(int(255-1.34*self.rY),int(255-1.34*self.gY),int(255-1.34*self.bY))
 
-    def keyPressed(self,event):
+    def keyPressed(self,event): # Change size of brush
         if event.key == 'Up': self.size = min(40,self.size+3)
         if event.key == 'Down': self.size = max(5,self.size-3)
 
-    def mousePressed(self,event):
+    def mousePressed(self,event): # Draw a new dot (or erase)
         if event.x > 20 and event.x < 100:
             if event.y > 550 and event.y < 610: self.erasing = not self.erasing
             if event.y > 625 and event.y < 675: DrawingMode.dots = self.dotDict; self.app.setActiveMode(self.app.splashMode)
@@ -1593,7 +1621,7 @@ class DrawingMode(Mode): # Mode for drawing a custom background
         canvas.create_rectangle(20,690,100,750,fill='#dddddd',width=0)
         canvas.create_text(60,720,text='CLEAR',font='Times 20 bold')
 
-class TopLevel(ModalApp): # Outermost app class
+class KIMCHI(ModalApp): # Outermost app class
     
     globalCanvas = None
     curMode = 0
@@ -1602,13 +1630,13 @@ class TopLevel(ModalApp): # Outermost app class
 
     def appStarted(self):
         self._root.resizable(False, False)
-        TopLevel.Vars = [None for i in range(maxVars)]
+        KIMCHI.Vars = [None for i in range(maxVars)]
         self.generateAtoms(25)
         self.generateIO(25)
         self.generateFunctions(25)
-        TopLevel.Defaults = [blockLibrary['Null'] for i in range(maxVars)]
-        TopLevel.VariableSlots = VarSetFunction('Set Variables',TopLevel.Vars)
-        TopLevel.FuncSlots = GenesisFunction('Create Function')
+        KIMCHI.Defaults = [blockLibrary['Null'] for i in range(maxVars)]
+        KIMCHI.VariableSlots = VarSetFunction('Set Variables',KIMCHI.Vars)
+        KIMCHI.FuncSlots = GenesisFunction('Create Function')
         self.splashMode = SplashMode()
         self.creationMode = CreationMode()
         self.sandboxMode = Sandbox()
@@ -1616,7 +1644,7 @@ class TopLevel(ModalApp): # Outermost app class
         self.tutorialMode = TutorialMode()
         self.drawingMode= DrawingMode()
         self.setActiveMode(self.splashMode)
-        self.funcStrings = ''
+        self.funcStrings = '' # Text on the Function Creator interface
         self.vBars, self.hBars = self.generateToothpickCurve(set([(400,400)]),set(),28)
         self.dragonCurve = self.generateDragonCurve([(370,250),(370,245)],11)
         self.polka = self.generatePolkaDots()
@@ -1624,7 +1652,7 @@ class TopLevel(ModalApp): # Outermost app class
         self.isoms = self.generateIsometries()
         self.kLogo = ImageTk.PhotoImage(self.scaleImage(self.loadImage('KLOGO.png'),0.25))
 
-    def generateIsometries(self):
+    def generateIsometries(self): # Generate isometric centers for backgrounds 7 & 8
         out = []
         for x in range(100,740,120):
             for y in range(-10,820,20):
@@ -1632,23 +1660,23 @@ class TopLevel(ModalApp): # Outermost app class
                 else: out.append((x+60,y))
         return out
 
-    def generatePolkaDots(self):
+    def generatePolkaDots(self): # Generate polka dots for background 5
         return [(100+(35*i)%540,(37*i)%800,random.random()*25,self.polkaColor()) for i in range(60)]
 
-    def polkaColor(self):
+    def polkaColor(self): # Generate polka dot colors for background 5
         if random.random() > 1/3:
             return rgb2hex(random.randint(0,100),random.randint(100,200),random.randint(150,250))
         return rgb2hex(random.randint(0,100),random.randint(150,250),random.randint(100,200))
 
-    def generateDiamonds(self):
+    def generateDiamonds(self): # Generate arrowhead coordinates for background 6
         return [(175+100*(i//20),20+(40*i)%800,random.random()*40-20,self.diamondColor()) for i in range(100)]
 
-    def diamondColor(self):
+    def diamondColor(self): # Generate arrowhead colors for background 6
         if random.random() > 1/3: return rgb2hex(random.randint(100,200),random.randint(50,150),random.randint(0,100))
         if random.random() > 1/3: return rgb2hex(random.randint(150,250),random.randint(50,150),random.randint(0,100))
         return rgb2hex(random.randint(150,250),random.randint(50,150),random.randint(0,100))
 
-    def generateToothpickCurve(self,vBars,hBars,depth):
+    def generateToothpickCurve(self,vBars,hBars,depth): # Generate toothpick curve for background 2
         if depth <= 0: return (vBars,hBars)
         newV, newH = vBars, hBars
         for v in vBars: 
@@ -1659,7 +1687,7 @@ class TopLevel(ModalApp): # Outermost app class
             if (h[0]+16,h[1]) not in newV.union(newH): newV.add((h[0]+8,h[1]))
         return self.generateToothpickCurve(newV,newH,depth-1)
 
-    def generateDragonCurve(self,points,depth):
+    def generateDragonCurve(self,points,depth): # Generate dragon curve for background 3
         if depth == 0: 
             return points
         out = points[:]
@@ -1667,7 +1695,7 @@ class TopLevel(ModalApp): # Outermost app class
             out.append(self.rotatePoint(points[i],points[-1]))
         return self.generateDragonCurve(out,depth-1)
 
-    def rotatePoint(self,point,center):
+    def rotatePoint(self,point,center): # Rotate one point around another by 90º (for dragon curve)
         x0, y0 = point
         xC, yC = center
         return (xC + (y0 - yC), yC - (x0 - xC))
@@ -1678,7 +1706,7 @@ class TopLevel(ModalApp): # Outermost app class
         if sName != None:
             if '.' in sName:
                 nextStep = popupBox(f'"{sName}" is not a valid name.\nPress ok else to try again.')
-                if nextStep != None: TopLevel.newSave()
+                if nextStep != None: KIMCHI.newSave()
             elif sName in getKimchiFiles():
                 nextStep = popupBox(f'"{sName}" is already a file name.\nSaving will overwrite it.\nType "ok" to proceed.')
                 if nextStep == 'ok':
@@ -1700,7 +1728,7 @@ class TopLevel(ModalApp): # Outermost app class
     @staticmethod
     def loadFile(name): # Loads a Kimchi File
         try:
-            TopLevel.wipeBlocks()
+            KIMCHI.wipeBlocks()
             DrawingMode.dots = {}
             f = open(f"<<KimchiFile>> {name}.txt","r")
             r = f.read()
@@ -1712,14 +1740,14 @@ class TopLevel(ModalApp): # Outermost app class
                 if i[0:3] == 'v: ':
                     t = eval(i.strip('v: '))
                     if t[0] == 'Set Variables':
-                        TopLevel.VariableSlots = VarSetFunction('Set Variables',list(map(lambda x: Dragger.superGenesis(x),t[3:])))
-                        TopLevel.Vars = TopLevel.VariableSlots.slots
+                        KIMCHI.VariableSlots = VarSetFunction('Set Variables',list(map(lambda x: Dragger.superGenesis(x),t[3:])))
+                        KIMCHI.Vars = KIMCHI.VariableSlots.slots
                     else: Dragger.superGenesis(t)
                 if i[0:3] == 'd: ':
                     t = eval(i.strip('d: '))
                     DrawingMode.dots = t
-            TopLevel.VariableSlots.slotify()
-            TopLevel.VariableSlots.getDimensions()
+            KIMCHI.VariableSlots.slotify()
+            KIMCHI.VariableSlots.getDimensions()
             f.close()
         except Exception as e:
             print(e)
@@ -1728,13 +1756,13 @@ class TopLevel(ModalApp): # Outermost app class
     @staticmethod
     def globalException(e): # What to put on screen instead of an exception that crashes TKinter
         x0, y0 = 710, 690
-        TopLevel.globalCanvas.create_oval(x0,y0,x0+20,y0+20,fill='#f2e422',width=0)
-        TopLevel.globalCanvas.create_text(x0,y0+40,text=chunkifyString(customError(e),50),anchor='nw',font='Times 12',fill='White')
+        KIMCHI.globalCanvas.create_oval(x0,y0,x0+20,y0+20,fill='#f2e422',width=0)
+        KIMCHI.globalCanvas.create_text(x0,y0+40,text=chunkifyString(customError(e),50),anchor='nw',font='Times 12',fill='White')
 
     @staticmethod
     def generateAtoms(atomX): # Generates all Atoms
-        out = [VarAtom(TopLevel.Vars[0],atomX,15,True,'V0')]
-        out += [VarAtom(TopLevel.Vars[i],atomX,out[-1].y+(Dragger.targetSize*2*i),True,f'V{i}') for i in range(1,maxVars)]
+        out = [VarAtom(KIMCHI.Vars[0],atomX,15,True,'V0')]
+        out += [VarAtom(KIMCHI.Vars[i],atomX,out[-1].y+(Dragger.targetSize*2*i),True,f'V{i}') for i in range(1,maxVars)]
         out += [Atom(i,atomX,out[-1].y+(Dragger.targetSize*2*(i+1)),True,str(i)) for i in range(11)]
         out += [Atom(-1,atomX,out[-1].y+Dragger.targetSize*2,True,'-1')]
         out += [Atom(round(math.tau,8),atomX,out[-1].y+Dragger.targetSize*2,True,chr(428))]
@@ -1775,9 +1803,9 @@ class TopLevel(ModalApp): # Outermost app class
         customFunctions = set()
         Dragger.cloneList = []
         Dragger.cloneList2 = []
-        TopLevel.VariableSlots.wipeVariables()
-        TopLevel.generateAtoms(25)
-        TopLevel.generateIO(25)
-        TopLevel.generateFunctions(25)
+        KIMCHI.VariableSlots.wipeVariables()
+        KIMCHI.generateAtoms(25)
+        KIMCHI.generateIO(25)
+        KIMCHI.generateFunctions(25)
 
-TopLevel(width=1000,height=800)
+KIMCHI(width=1000,height=800)
