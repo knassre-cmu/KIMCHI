@@ -1,6 +1,6 @@
 import random
 
-# I originally wrote this during (BUT NOT FOR) adv. OOP week, but heavily modified it since then
+# I originally wrote this during (BUT NOT FOR) adv. OOP week, but have heavily modified it since then
 
 class Axis(object): # Custom immutable list class with some useful methods
     def __init__(self,*values):
@@ -198,13 +198,6 @@ class Axis(object): # Custom immutable list class with some useful methods
 
     def column(self,c):
         return self.invert()[c]
-
-    @staticmethod
-    def stringSplit(s,par=None): # Returns an Axis that splits up a string
-        if par == None:
-            return Axis(*list(s))
-        print(s,par)
-        return Axis(*s.split(par))
 
     def reverse(self): # Reverses an Axis
         return Axis(*self.values[::-1])
@@ -457,11 +450,3 @@ class Axis(object): # Custom immutable list class with some useful methods
         if n == None:
             return self
         return self.pop(k).inject(k,n)
-
-A0 = Axis()
-A1 = Axis(1,2,3,4)
-A2 = Axis('a','c','e','g')
-A3 = Axis(2,3,5,7,11)
-A4 = Axis('x','y','z')
-A5 = Axis(A1,A2,A3,A4)
-A6 = Axis(0,1,2)
