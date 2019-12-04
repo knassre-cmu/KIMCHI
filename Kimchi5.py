@@ -4,13 +4,6 @@ from tkinter import simpledialog
 import Axis
 from cmu_112_graphics import * # From https://www.cs.cmu.edu/~112/notes/notes-animations-part1.html
 
-# To do list:
-# fix the evaluator section in Function Creator mode
-# improve capabilities of random
-# widen screen
-# add custom backgrounds (w saving?)
-# fix Quandry & Mystery in tutorial mode (delete upon exiting)
-
 blockLibrary = {} # Dictionary of all known functions/atoms (used for defaults & drawing function library)
 customFunctions = set() # Set of all custom functions that will be exported with saving
 ioLibrary = {} # Dictionary of input atoms used for function genesis
@@ -28,42 +21,47 @@ def getKimchiFiles(): # Searches through the current directory tto find Kimchi f
     return list(map(lambda y: y[15:][:-4], filter(lambda x: x[:14] == '<<KimchiFile>>' and x[-4:] == '.txt',os.listdir(os.getcwd()))))
 
 def fillBlockWithInputs(f,i): # Parses through list of strings representing a function to add inputs
-    if f in list(ioLibrary.keys()): return i[int(f[1])]
+    if f in list(ioLibrary.keys()):
+        inp = i[int(f[1])] 
+        if inp == None or inp == 'Null' or inp == blockLibrary['Null']: return 'Null'
+        return inp
     if isinstance(f,str): return f
-    return list(map(lambda x: fillBlockWithInputs(x,i),f))
+    return list(map(lambda x: fillBlockWithInputs(x,i) if str(x) not in ['None','Null'] else None,f))
 
-def callBlockWithInputs(f,parent): # Parses through a list of strings representing a function (with inputs) to call it
+def callBlockWithInputs(f,parent,depth=0): # Parses through a list of strings representing a function (with inputs) to call it
+    if depth == 20: return None # Stack overflow guard (since an infinate recursion will be circular, the try-except will not catch it -> python will CRASH)
     if isinstance(f,str) and f in blockLibrary: return blockLibrary[f]() # If at an Atom, just return it
     if not isinstance(f,list): return f # If at a value, just return it
     func = blockLibrary[f[0]]
     try:
         if isinstance(func,ControlFunction): # If a control function, implement HOF (reduceLambda knows how to parse through strings)
-            return func.value(f[1],callBlockWithInputs(f[2],parent))
+            return func.value(f[1],callBlockWithInputs(f[2],parent,depth+1))
         if isinstance(func,CustomFunction): # If a custom function, retrieve it's data string
             if CreationMode.frankenstein != None and f[0] == CreationMode.frankenstein.name: # If calling the function currently being worked on, get it from the class attributtes
                 data = TopLevel.FuncSlots.slots[0].FuncToString()
             else: data = func.dataString
-            return callBlockWithInputs(fillBlockWithInputs(data,list(map(lambda x: callBlockWithInputs(x,parent), f[1:]))),parentt)
+            return callBlockWithInputs(fillBlockWithInputs(data,list(map(lambda x: callBlockWithInputs(x,parent,depth+1) if str(x) not in ['None','Null'] else None, f[1:]))),parent,depth+1)
         if func.name == 'if else': # Sequential-evaluation logic (if-else, switch) requires manual implementation
-            if callBlockWithInputs(f[1],parent): return callBlockWithInputs(f[2],parent)
-            return callBlockWithInputs(f[3],parent)
+            if callBlockWithInputs(f[1],parent,depth+1): return callBlockWithInputs(f[2],parent,depth+1)
+            return callBlockWithInputs(f[3],parent,depth+1)
         if func.name == 'switch':
             for i in range(1,len(f[1])):
-                if callBlockWithInputs(f[1][i],parent): return callBlockWithInputs(f[2][i],parent)
+                if callBlockWithInputs(f[1][i],parent,depth+1): return callBlockWithInputs(f[2][i],parent,depth+1)
             return blockLibrary['Null']
-        pRand = (parent.rid + (hash(str(f)) % 1000)/1000) % 1
-        if f[0] == 'random int':
-            lo = callBlockWithInputs(f[1],parent)
-            hi = callBlockWithInputs(f[2],parent)
-            return int((pRand* (hi-lo)) + lo)
-        if f[0] == 'random float':
-            lo = callBlockWithInputs(f[1],parent)
-            hi = callBlockWithInputs(f[2],parent)
-            return (pRand * (hi-lo)) + lo
-        elif f[0] == 'random choice':
-            l = callBlockWithInputs(f[1],parent)
-            return l[int(pRand*len(l))]
-        return func.value(*map(lambda x: callBlockWithInputs(x,parent), f[1:]))
+        if f[0] in ['random int', 'random float', 'random choice']:
+            pRand = (parent.rid + (hash(str(f)) % 1000)/1000) % 1
+            if f[0] == 'random int':
+                lo = callBlockWithInputs(f[1],parent,depth+1)
+                hi = callBlockWithInputs(f[2],parent,depth+1)
+                return int((pRand* (hi-lo)) + lo)
+            elif f[0] == 'random float':
+                lo = callBlockWithInputs(f[1],parent,depth+1)
+                hi = callBlockWithInputs(f[2],parent,depth+1)
+                return (pRand * (hi-lo)) + lo
+            else:
+                l = callBlockWithInputs(f[1],parent,depth+1)
+                return l[int(pRand*len(l))]
+        return func.value(*map(lambda x: callBlockWithInputs(x,parent,depth+1) if str(x) not in ['None','Null'] else None, f[1:]))
     except Exception as e: # Catch all errors under the global exception
         TopLevel.globalException(e)
         try: return func()
@@ -90,7 +88,7 @@ def chunkifyString(s,l): # Chops up a string into lines of length l
     return '\n'.join(out+[row]).strip()
 
 def rgb2hex(r,g,b): # Returns a hexedecimal color string based on 3 rgb integers
-    h1, h2, h3 = hex(r)[2:], hex(g)[2:], hex(b)[2:]
+    h1, h2, h3 = hex(max(0,min(255,r)))[2:], hex(max(0,min(255,g)))[2:], hex(max(0,min(255,b)))[2:]
     if r < 16: h1 = '0' + h1
     if g < 16: h2 = '0' + h2
     if b < 16: h3 = '0' + h3
@@ -199,6 +197,14 @@ def randomList(n,k): # Return a list of n random floats with seed k
         out.append(round((out[-1]+hash(out[-1]/math.pi)/100000)%1,8))
     return Axis.Axis(*out)
 
+def stringSplit(s,par=None): # Returns an Axis that splits up a string
+    try:
+        if par == None:
+            return Axis.Axis(*list(s))
+        return Axis.Axis(*s.split(par))
+    except Exception as e:
+        TopLevel.globalException(e)
+
 class Dragger(object): # Class of all draggable blocks
 
     cloneList = [] # List of all block clones (in sandbox mode)
@@ -265,7 +271,8 @@ class Dragger(object): # Class of all draggable blocks
             return self
 
     def __eq__(self,other): # Compares Draggers
-        return type(self) == type(other) and self.name == other.name and self.x == other.x and self.y == other.y and self.value == other.value
+        try: return type(self) == type(other) and self.name == other.name and self.x == other.x and self.y == other.y and self.value == other.value
+        except: return False
 
     def FuncToString(self): # Converts Draggers into strings that can be read by custom functions
         if isinstance(self,Atom):
@@ -335,9 +342,10 @@ class Function(Dragger): # Class of all functions
             if self.slots[i] == None: self.operands[i] = self.defaults[i]
             else: self.operands[i] = self.slots[i]
 
-    def __call__(self): # If being treated like a function, call the lambda expression
+    def __call__(self,depth=0): # If being treated like a function, call the lambda expression
         try:
-            val = self.value(*map(lambda x: x(), self.operands))
+            if depth > 20: raise RecursionError
+            val = self.value(*map(lambda x: x(depth+1), self.operands))
             if isinstance(val,float):
                 return round(val,8)
             return val
@@ -423,8 +431,9 @@ class ArithmeticFunction(Function):
         super().__init__('ArithmeticFunction',name,value,x,y,cloneable,defaults,slots,parent)
         self.color = '#49bcdf'
 
-    def __call__(self):
+    def __call__(self,depth=0): # If being treated like a function, call the lambda expression
         try:
+            if depth > 20: raise RecursionError
             if self.name == 'random int':
                 lo = self.operands[0]()
                 hi = self.operands[1]()
@@ -437,7 +446,7 @@ class ArithmeticFunction(Function):
                 l = self.operands[0]()
                 return l[int(self.rid*len(l))]
             else:
-                val = self.value(*map(lambda x: x(), self.operands))
+                val = self.value(*map(lambda x: x(depth+1), self.operands))
                 if isinstance(val,float):
                     return round(val,8)
                 return val
@@ -457,19 +466,20 @@ class PredicateFunction(Function):
         super().__init__('PredicateFunction',name,value,x,y,cloneable,defaults,slots,parent)
         self.color = '#9079f6'
 
-    def __call__(self): # If being treated like a function, call the lambda expression
+    def __call__(self,depth=0): # If being treated like a function, call the lambda expression
         try:
+            if depth > 20: raise RecursionError
             if self.name == 'if else' or self.name == 'switch':
                 val = self.value(*self.operands)
             else:
-                val = self.value(*map(lambda x: x(), self.operands))
+                val = self.value(*map(lambda x: x(depth+1), self.operands))
             if isinstance(val,float):
                 return round(val,8)
             return val
         except Exception as e: # If inputs are invalid, return the defualt and print an error
             print(e)
             TopLevel.globalException(e)
-            return self.value(*map(lambda x: x(), self.defaults))
+            return self.value(*map(lambda x: x(depth+1), self.defaults))
 
 class IterableFunction(Function):
     color = '#ea5639'
@@ -490,9 +500,10 @@ class ControlFunction(Function):
         except:
             return True
 
-    def __call__(self): # If being treated like a function, call the lambda expression
+    def __call__(self,depth=0): # If being treated like a function, call the lambda expression
         try:
-            val = self.value(self.operands[0],*map(lambda x: x(),self.operands[1:]))
+            if depth > 20: raise RecursionError
+            val = self.value(self.operands[0],*map(lambda x: x(depth+1),self.operands[1:]))
             if isinstance(val,float):
                 return round(val,8)
             return val
@@ -511,7 +522,7 @@ class VarSetFunction(Function):
         TopLevel.Vars = [None for i in range(maxVars)]
         self.slots = [None for i in range(maxVars)]
 
-    def __call__(self): # If being called, do nothing
+    def __call__(self,depth=0):
         pass
 
     def drawFunction(self,canvas,app): # Draws the variable setter
@@ -542,7 +553,7 @@ class GenesisFunction(Function):
         self.color = '#e85f64'
         self.buffer = 5
 
-    def __call__(self): # If being called, do nothing
+    def __call__(self,depth=0): 
         return
 
     def drawFunction(self,canvas,app): # Draws the variable setter
@@ -570,13 +581,14 @@ class CustomFunction(Function):
         if cloneable:
             customFunctions.add(self)
 
-    def __call__(self):
+    def __call__(self,depth=0): # If being treated like a function, call the lambda expression
         try:
+            if depth > 20: raise RecursionError
             if CreationMode.frankenstein != None and self.name == CreationMode.frankenstein.name:
                 me = TopLevel.FuncSlots.slots[0].FuncToString()
             else:
                 me = blockLibrary[self.name].dataString
-            val = callBlockWithInputs(fillBlockWithInputs(me,list(map(lambda x: x(), self.slots))),self)
+            val = callBlockWithInputs(fillBlockWithInputs(me,list(map(lambda x: x() if str(x) not in ['None','Null'] else None, self.slots))),self)
             return val
         except Exception as e:
             TopLevel.globalException(e)
@@ -618,8 +630,9 @@ class Atom(Dragger): # Class of all atoms
         elif isinstance(self.value,Axis.Axis): self.color = '#ea5639'
         else: self.color = '#b7abbf'
 
-    def __call__(self): # If treated as a function, return the value
+    def __call__(self,depth=0): # If being treated like a function, call the lambda expression
         try:
+            if depth > 20: raise RecursionError
             return self.value
         except:
             return None
@@ -656,9 +669,10 @@ class VarAtom(Atom): # Subclass of Atom to handle variable atoms
         if cloneable: blockLibrary[self.name] = self
         else: Dragger.cloneList.append(self)
 
-    def __call__(self): # Try-except to prevent circular logic (V2 = V1 but V1 = V2)
+    def __call__(self,depth=0): # Try-except to prevent circular logic (V2 = V1 but V1 = V2)
         try:
-            return TopLevel.Vars[int(self.name[1:])]()
+            if depth > 20: raise RecursionError
+            return TopLevel.Vars[int(self.name[1:])](depth+1)
         except:
             return None
 
@@ -708,12 +722,12 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
         self.scrolling3 = False
         self.VarString = ''
         self.background = 0
-        self.backgroundMax = 10
+        self.backgroundMax = 11
 
     def modeActivated(self): # Scrap the graphics file canvas so that I can handle exceptions myself
         self.scrollMax = sorted(list(blockLibrary.values()),key=lambda x: x.y)[-1].y+2*Dragger.targetSize - 800
         self.app._canvas.pack_forget()
-        self.canvas = Canvas(self.app._root,width=800,height=800)
+        self.canvas = Canvas(self.app._root,width=1000,height=800)
         self.canvas.pack()
         TopLevel.globalCanvas = self.canvas
         TopLevel.curMode = 1
@@ -736,6 +750,7 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
                     if popupBox('Type DELETE to clear the sandbox') == 'DELETE':
                         TopLevel.wipeBlocks()
                         TopLevel.VariableSlots.getDimensions()
+                        DrawingMode.dots = {}
 
     def getFunctionInfo(self):
         if not CreationMode.done:
@@ -778,7 +793,7 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
         self.pressingButtons(event.x,event.y)
         if event.x < 10: self.scrolling = True
         elif event.x < 640 and event.x > 630: self.scrolling2 = True
-        elif event.x > 790: self.scrolling3 = True
+        elif event.x > 990: self.scrolling3 = True
         else:
             for i in list(blockLibrary.values()) + Dragger.cloneList:
                 if i == None or i.name == 'Create Function': continue
@@ -828,7 +843,7 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
         if isinstance(self.holding,Function):
             self.holding.slotify()
         xEdge = event.x + self.holding.xMax/2
-        if event.x - Dragger.targetSize < 150 or xEdge > self.width*0.8:
+        if event.x - Dragger.targetSize < 150 or xEdge > 640:
             Dragger.cloneList.remove(self.holding)
             if isinstance(self.holding,Function): self.holding.killChildren()
         else:
@@ -859,21 +874,25 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
         canvas.create_oval(4,y2-7,14,y2+7,fill='#a8a7a9',width=0)
         canvas.create_rectangle(630,0,640,self.height,fill='#d1d1d2',width=0)
         canvas.create_oval(632,y3-3,638,y3+3,fill='#a8a7a9',width=0)
-        canvas.create_rectangle(790,0,800,self.height*0.8375,fill='#d1d1d2',width=0)
-        canvas.create_oval(790,y4-3,797,y4+3,fill='#a8a7a9',width=0)
+        canvas.create_rectangle(990,0,1000,self.height*0.8375,fill='#d1d1d2',width=0)
+        canvas.create_oval(991,y4-3,997,y4+3,fill='#a8a7a9',width=0)
 
     def drawEvaluator(self,canvas):
-        x0 = self.width * 0.81
+        x0 = 660
         y0 = 10 - self.scrollY3
         out = ['Variable Evaluator:']
+        coloredText = 'Green'
         for i in range(maxVars):
-            v = TopLevel.Vars[i]
-            if v == None or v() == None: out.append(f'V{i} = Null')
-            else:
-                if isinstance(v(),float): out.append(chunkifyString(f'V{i} = {round(v(),8)}',28))
-                else: out.append(chunkifyString(f'V{i} = {v()}',28))
+            v0 = TopLevel.Vars[i]
+            if v0 == None: out.append(f'V{i} = Null'); continue
+            v = v0()
+            if v == None: out.append(f'V{i} = Null'); continue
+            elif isinstance(v,float): out.append(chunkifyString(f'V{i} = {round(v,8)}',42)); continue
+            out.append(chunkifyString(f'V{i} = {v}',42).replace('None','Null'))
+            if isinstance(v,str) and len(v) == 7 and v[0] == '#' and set(v[1:]) - set('abcdef0123456789') == set():
+                coloredText = v
         Sandbox.VarString = '\n'.join(out)
-        canvas.create_text(x0,y0,anchor='nw',text=Sandbox.VarString,fill='Green',font='Times 10')
+        canvas.create_text(x0,y0,anchor='nw',text=Sandbox.VarString,fill=coloredText,font='Times 18')
 
     def drawButtons(self,canvas):
         r, x0, x1 = 25, 590, 630
@@ -906,14 +925,6 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
         canvas.create_oval(x0-r/1.5,y2,x0+r/1.5,y3,width=0,fill=c3B)
         canvas.create_polygon(x0,y2+20,x0,y3-10,x1-15,y3-10,x1-15,y2+20,xA-1,y2+10,width=0,fill=c3A)
 
-    def drawLibraryScroll(self,canvas): # Draw the scrollbar(s)
-        y2 = min(max(10,self.height * self.scrollY / self.scrollMax),790)
-        y3 = min(max(5,self.height * self.scrollY2 / self.scrollMax2),790)
-        canvas.create_rectangle(0,0,15,self.height,fill='#d1d1d2',width=0)
-        canvas.create_oval(4,y2-7,14,y2+7,fill='#a8a7a9',width=0)
-        canvas.create_rectangle(630,0,640,self.height,fill='#d1d1d2',width=0)
-        canvas.create_oval(632,y3-3,638,y3+3,fill='#a8a7a9',width=0)
-
     def drawTartan(self,canvas,*stripes):
         for x0,y0,x1,y1,c,w in stripes:
             if y0 < y1: xA, yA, xB, yB, xC, yC, xD, yD = x0+w, y0-w, x1+w, y1-w, x1-w, y1+w, x0-w, y0+w
@@ -921,7 +932,7 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
             canvas.create_polygon(xA,yA,xB,yB,xC,yC,xD,yD,fill=c,width=0)
 
     def drawBackground(self,canvas):
-        if self.background < 2: canvas.create_rectangle(150,0,0.8*self.width,self.height,fill='Black',width=0)
+        if self.background < 2: canvas.create_rectangle(150,0,640,self.height,fill='Black',width=0)
         if self.background == 1: 
             dT = 2.95
             hexaColors = ['#ff99aa','#ffbb99','#ffff99','#99ffaa','#99aaff','#ffaaff']
@@ -940,7 +951,12 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
         elif self.background == 8:
             for i in self.app.isoms: self.drawIsometric2(canvas,i[0],i[1])
         elif self.background == 9: self.canvas.create_image(400,400,image=self.app.kLogo)
-        canvas.create_rectangle(0.8*self.width,0,self.width,self.height,fill='Black',width=0)
+        elif self.background == 10:
+            for x,y in DrawingMode.dots:
+                r,c = DrawingMode.dots[(x,y)]
+                if c[1] == c[3] and c[3] == c[5] and c[5] == 'f': c = 'White'
+                canvas.create_oval(x-r,y-r,x+r,y+r,fill=c,width=0)
+        canvas.create_rectangle(640,0,self.width,self.height,fill='Black',width=0)
 
     def drawIsometric(self,canvas,x2,y2):
         x0, x1, x3, x4 = x2-40, x2-20, x2+20, x2+40
@@ -949,17 +965,17 @@ class Sandbox(Mode): # Mode with the sandbox for playing with Atoms & Functions
         canvas.create_polygon(x0,y1,x0,y3,x1,y4,x1,y5,x2,y6,x2,y2,fill=darkenColor('#ffff99',0),width=0)
         canvas.create_polygon(x4,y1,x4,y3,x3,y4,x3,y5,x2,y6,x2,y2,fill=darkenColor('#99aaff',2),width=0)
 
-    def drawIsometric2(self,canvas,x2,y2):
+    def drawIsometric2(self,canvas,x2,y3):
         x0, x1, x3, x4 = x2-38, x2-18, x2+18, x2+38
-        y6, y5, y4, y3, y1, y0 = y2 - 15, y2-10, y2 + 5, y2+10, y2+25, y2+30
+        y6, y5, y4, y2, y1, y0 = y3 - 15, y3-10, y3 + 5, y3+10, y3+25, y3+30
         canvas.create_polygon(x0,y1,x1,y0,x2,y1,x3,y0,x4,y1,x2,y2,fill=darkenColor('#99aaff',2),width=0)
-        canvas.create_polygon(x0,y1,x0,y3,x1,y4,x1,y5,x2,y6,x2,y2,fill=darkenColor('#aa99ff',2),width=0)
-        canvas.create_polygon(x4,y1,x4,y3,x3,y4,x3,y5,x2,y6,x2,y2,fill=darkenColor('#ff99aa',2),width=0)
+        canvas.create_polygon(x0,y1,x0,y3,x1,y4,x1,y5,x2,y6,x2,y2,fill=darkenColor('#994499',2),width=0)
+        canvas.create_polygon(x4,y1,x4,y3,x3,y4,x3,y5,x2,y6,x2,y2,fill=darkenColor('#bb0088',2),width=0)
 
     def redrawAll(self,canvas): # Manually implement animation using my own packed canvas
         self.canvas.delete(ALL)
         self.drawBackground(self.canvas)
-        self.canvas.create_rectangle(1+self.width*0.8,self.height,self.width-2,self.height-129,fill='Black',width=3,outline='White')
+        self.canvas.create_rectangle(1+640,self.height,self.width-2,self.height-129,fill='Black',width=3,outline='White')
         self.drawLibraryScroll(self.canvas)
         self.drawEvaluator(self.canvas)
         self.drawButtons(self.canvas)
@@ -1003,7 +1019,7 @@ class CreationMode(Sandbox):
     def modeActivated(self): # Scrap the graphics file canvas so that I can handle exceptions myself
         self.scrollMax = sorted(list(blockLibrary.values()),key=lambda x: x.y)[-1].y+2*Dragger.targetSize - 920
         self.app._canvas.pack_forget()
-        self.canvas = Canvas(self.app._root,width=800,height=800)
+        self.canvas = Canvas(self.app._root,width=1000,height=800)
         self.canvas.pack()
         TopLevel.globalCanvas = self.canvas
         TopLevel.curMode = 2
@@ -1081,7 +1097,7 @@ class CreationMode(Sandbox):
         if isinstance(self.holding,Function):
             self.holding.slotify()
         xEdge = event.x + self.holding.xMax/2
-        if event.x - Dragger.targetSize < 150 or xEdge > self.width*0.8:
+        if event.x - Dragger.targetSize < 150 or xEdge > 640:
             Dragger.cloneList2.remove(self.holding)
             if isinstance(self.holding,Function):
                 self.holding.killChildren()
@@ -1096,20 +1112,28 @@ class CreationMode(Sandbox):
                         break
         self.holding = [None]
 
+    def drawLibraryScroll(self,canvas): # Draw the scrollbar(s)
+        y2 = min(max(10,self.height * self.scrollY / self.scrollMax),790)
+        y3 = min(max(5,self.height * self.scrollY2 / self.scrollMax2),790)
+        canvas.create_rectangle(0,0,15,self.height,fill='#d1d1d2',width=0)
+        canvas.create_oval(4,y2-7,14,y2+7,fill='#a8a7a9',width=0)
+        canvas.create_rectangle(630,0,640,self.height,fill='#d1d1d2',width=0)
+        canvas.create_oval(632,y3-3,638,y3+3,fill='#a8a7a9',width=0)
+
     def drawEvaluator(self,canvas):
         x0 = self.width * 0.81
-        y0 = 10
+        y0 = 30
         out = ['Function Creator:']
         out.append(f'Name: {self.fStrings[0]}')
         out.append(f'Type: {self.fStrings[1]}')
         out.append(f'Inputs: {self.fStrings[2]}')
         Sandbox.VarString = '\n'.join(out)
-        canvas.create_text(x0,y0,anchor='nw',text=Sandbox.VarString,fill='Green',font='Times 10')
+        canvas.create_text(x0,y0,text=Sandbox.VarString,fill='Green',font='Times 20 bold',anchor='n')
 
     def redrawAll(self,canvas): # Manually implement animation using my own packed canvas
         self.canvas.delete(ALL)
         self.drawBackground(self.canvas)
-        self.canvas.create_rectangle(1+self.width*0.8,self.height,self.width-2,self.height-129,fill='Black',width=3,outline='White')
+        self.canvas.create_rectangle(1+640,self.height,self.width-2,self.height-129,fill='Black',width=3,outline='White')
         self.drawLibraryScroll(self.canvas)
         self.drawEvaluator(self.canvas)
         self.drawButtons(self.canvas)
@@ -1129,16 +1153,18 @@ class CreationMode(Sandbox):
 class SplashMode(Mode): # The colorful splash screen mode
     def modeActivated(self): # When activated, discard the graphics-file canvas
         self.app._canvas.pack_forget()
-        self.canvas = Canvas(self.app._root,width=800,height=800)
+        self.canvas = Canvas(self.app._root,width=1000,height=800)
         self.canvas.pack()
         TopLevel.globalCanvas = self.canvas
         self.mX, self.mY = 0,0
+        self.mystery = 5
+        self.quandry = False
 
     def appStarted(self):
         self.hoverColor = 'White'
         self.spin = 0
         self.timerDelay = 5
-        self.squares = [self.polarize(400,250,self.hexaSpin(200,math.radians(t)),math.radians(t)) for t in range(0,360,3)]
+        self.squares = [self.polarize(500,250,self.hexaSpin(200,math.radians(t)),math.radians(t)) for t in range(0,360,3)]
 
     def modeDeactivated(self): # When deactivated, re-impose the graphics-file canvas
         self.canvas.pack_forget()
@@ -1157,13 +1183,20 @@ class SplashMode(Mode): # The colorful splash screen mode
         self.mX, self.mY = event.x, event.y
 
     def mousePressed(self,event):
-        if event.x > 321 and event.x < 479:
-            if event.y > 606 and event.y < 644: self.app.setActiveMode(self.app.sandboxMode)
+        if event.x > 421 and event.x < 579:
+            if self.quandry: pass
+            elif event.y > 150 and event.y < 350: self.quandry = True
+            elif event.y > 606 and event.y < 644: self.app.setActiveMode(self.app.sandboxMode)
             elif event.y > 656 and event.y < 694: self.app.setActiveMode(self.app.loadMode)
             elif event.y > 706 and event.y < 744: self.app.setActiveMode(self.app.tutorialMode)
 
     def timerFired(self): # Increment the animation
-        self.spin += 5
+        self.spin += self.mystery
+        if self.quandry:
+            self.mystery += 0.2 
+            if self.mystery > 20: 
+                self.quandry, self.mystery = False, 5
+                self.app.setActiveMode(self.app.drawingMode)
         self.squares.append(self.squares.pop(0))
         red = int(85 * math.sin(2*math.pi*(5*self.spin/360)) + 170)
         green = int(85 * math.sin(2*math.pi*((5*self.spin+120)/360)) + 170)
@@ -1191,25 +1224,25 @@ class SplashMode(Mode): # The colorful splash screen mode
         return (x0-5,y0-5),(x0,y0),(x0+5,y0+5),(x1-5,y1+5),(x1,y1),(x1+5,y1-5),(x2+5,y2+5),(x2,y2),(x2-5,y2-5),(x3+5,y3-5),(x3,y3),(x3-5,y3+5)
 
     def drawButtons(self,canvas):
-        if self.mX > 321 and self.mX < 479:
+        if self.mX > 421 and self.mX < 579:
             if self.mY > 606 and self.mY < 644: colors = [self.hoverColor,'White','White',]
             elif self.mY > 656 and self.mY < 694: colors = ['White',self.hoverColor,'White']
             elif self.mY > 706 and self.mY < 744: colors = ['White','White',self.hoverColor]
             else: colors = ['White','White','White']
         else: colors = ['White','White','White']
-        canvas.create_polygon(*self.buttonCords(400,625,75,15),smooth=True,fill=colors[0],width=None)
-        canvas.create_text(400,625,text='Enter',fill='black',font='Times 26 bold')
-        canvas.create_polygon(*self.buttonCords(400,675,75,15),smooth=True,fill=colors[1],width=None)
-        canvas.create_text(400,675,text='Load',fill='black',font='Times 26 bold')
-        canvas.create_polygon(*self.buttonCords(400,725,75,15),smooth=True,fill=colors[2],width=None)
-        canvas.create_text(400,725,text='Tutorial',fill='black',font='Times 26 bold')
+        canvas.create_polygon(*self.buttonCords(500,625,75,15),smooth=True,fill=colors[0],width=None)
+        canvas.create_text(500,625,text='Enter',fill='black',font='Times 26 bold')
+        canvas.create_polygon(*self.buttonCords(500,675,75,15),smooth=True,fill=colors[1],width=None)
+        canvas.create_text(500,675,text='Load',fill='black',font='Times 26 bold')
+        canvas.create_polygon(*self.buttonCords(500,725,75,15),smooth=True,fill=colors[2],width=None)
+        canvas.create_text(500,725,text='Tutorial',fill='black',font='Times 26 bold')
 
     def redrawAll(self,canvas): # Clear canvas with each tick & draw all squares
         self.canvas.delete(ALL)
         self.canvas.create_rectangle(0,0,self.width,self.height,fill='Black')
         for i in range(6):
             sX, sY = self.squares[int(i*20-self.spin/2)%120]
-            self.canvas.create_text((sX+800)/3,(sY+500)/3,font=f'Times {35-3*i}',fill='White',text='KIMCHI'[i])
+            self.canvas.create_text((sX+1000)/3,(sY+500)/3,font=f'Times {int(30+self.mystery-3*i)}',fill='White',text='KIMCHI'[i])
         for i,square in enumerate(self.squares):
             self.drawSquare(9*i+self.spin%360,square,self.canvas)
         self.drawButtons(self.canvas)
@@ -1217,7 +1250,7 @@ class SplashMode(Mode): # The colorful splash screen mode
 class LoadMode(Mode):
     def modeActivated(self): # When activated, discard the graphics-file canvas
         self.app._canvas.pack_forget()
-        self.canvas = Canvas(self.app._root,width=800,height=800)
+        self.canvas = Canvas(self.app._root,width=1000,height=800)
         self.canvas.pack()
         TopLevel.globalCanvas = self.canvas
         self.allFiles = getKimchiFiles()
@@ -1283,7 +1316,7 @@ class LoadMode(Mode):
 
     def redrawAll(self,canvas):
         self.canvas.create_rectangle(0,0,self.width,self.height,fill='#888888')
-        self.canvas.create_rectangle(200,200,self.width-200,self.height-200,fill='#bcbcbc')
+        self.canvas.create_rectangle(200,200,600,self.height-200,fill='#bcbcbc')
         self.canvas.create_rectangle(200,150,500,200,fill='#343434')       
         self.canvas.create_text(210,175,font='Times 26 bold',text='Saved Kimchi Files:',anchor='w',fill='#efefef')
         if self.kF == []: self.canvas.create_text(400,250,font='Times 26 bold',text='There are no Kimchi Files to load')
@@ -1308,7 +1341,7 @@ class TutorialMode(Mode): # Help screen
     def appStarted(self):
         self.holding = [None]
         self.scrollY = self.scrollY2 = 0
-        self.scrollM = 850
+        self.scrollM = 950
         self.prism = '#666666'
         self.time = 0
         self.textList = self.getText()
@@ -1343,8 +1376,8 @@ class TutorialMode(Mode): # Help screen
         green = int(55 * math.sin(2*math.pi*((5*self.time+120)/360)) + 150)
         blue = int(55 * math.sin(2*math.pi*((5*self.time+240)/360)) + 150)
         self.prism = '#' + hex(red)[2:] + hex(green)[2:] + hex(blue)[2:]
-        if self.scrollingUp and self.scrollY > 0: self.scrollY -= (100 - self.my)/10; self.scrollY2 -= (100 - self.my)/10
-        if self.scrollingDown and self.scrollY < self.scrollM: self.scrollY += (self.my - 700)/10; self.scrollY2 += (self.my - 700)/10
+        if self.scrollingUp and self.scrollY > 0: self.scrollY -= (100 - self.my)/7; self.scrollY2 -= (100 - self.my)/7
+        if self.scrollingDown and self.scrollY < self.scrollM: self.scrollY += (self.my - 700)/7; self.scrollY2 += (self.my - 700)/7
 
     def getText(self): # Text for tutorial mode by coordinates
         out = []
@@ -1400,16 +1433,19 @@ class TutorialMode(Mode): # Help screen
         yellow spiral button.''',90)
         blocks7 = chunkifyString(f'''
         PS: several functions involve randomness and random numbers. The random
-        float/integer/item is reset upon clicking on the random function in question.
-        Using random functions in higher order functions is ok in the Variibale Sandbox,
+        seed is reset upon clicking on the random function in question.
+        Using random functions in higher order functions is ok in the Variabale Sandbox,
         but using random functions at all inside of custom functions is to be avoided.
         Instead, try to generate the randomness inside of inputs.''',90)
-        for i in blocks1.splitlines() + blocks2.splitlines() + blocks3.splitlines() + [''] + blocks4.splitlines() + ([''] * 8) + blocks5.splitlines() + ([''] * 29) + blocks6.splitlines() + [''] + blocks7.splitlines():
+        blocks8 = chunkifyString(f'''
+        PPS: If none of the background options are exciting to you, try clicking on 
+        the KIMCHI text on the home screen.''',90)
+        for i in blocks1.splitlines() + blocks2.splitlines() + blocks3.splitlines() + [''] + blocks4.splitlines() + ([''] * 8) + blocks5.splitlines() + ([''] * 29) + blocks6.splitlines() + [''] + blocks7.splitlines() + [''] + blocks8.splitlines():
             out.append({'x':30,'y':out[-1]['y']+20,'text':i,'font':'Times 16','anchor':'w','fill':'Black'})
         return out
 
     def mousePressed(self,event):
-        if event.x > 750 and event.y < 60: self.app.setActiveMode(self.app.splashMode)
+        if event.x > 950 and event.y < 60: self.app.setActiveMode(self.app.splashMode)
         for i in self.sampleBlocks:
             contact = i.touching(event.x,event.y,self)
             if contact != None:
@@ -1449,47 +1485,120 @@ class TutorialMode(Mode): # Help screen
 
     def mouseMoved(self,event):
         self.my = event.y
-        if event.y < 100 and self.scrollY > 0: self.scrollingUp = True; self.scrollingDown = False
-        elif event.y > 700 and self.scrollY < self.scrollM: self.scrollingUp = False; self.scrollingDown = True
+        if event.y < 100 and self.scrollY > 0 and event.x < 800: self.scrollingUp = True; self.scrollingDown = False
+        elif event.y > 700 and self.scrollY < self.scrollM and event.x < 800: self.scrollingUp = False; self.scrollingDown = True
         else: self.scrollingUp = False; self.scrollingDown = False
     
     def drawDemoEval(self,canvas):
         operands = self.sampleBlocks[0].operands
-        canvas.create_text(500,710-self.scrollY,anchor='w',text=f'Mystery({operands[0]},{operands[1]})',fill=self.prism,font='Times 20 bold')
-        canvas.create_text(500,730-self.scrollY,anchor='w',text=f'= {self.sampleBlocks[0]()}',fill=self.prism,font='Times 20 bold')
+        canvas.create_text(600,710-self.scrollY,anchor='w',text=f'Mystery({operands[0]},{operands[1]})',fill=self.prism,font='Times 20 bold')
+        canvas.create_text(600,730-self.scrollY,anchor='w',text=f'= {self.sampleBlocks[0]()}',fill=self.prism,font='Times 20 bold')
         operands2 = self.sampleBlocks[1].operands
-        canvas.create_text(500,910-self.scrollY,anchor='w',text=f'Quandry({operands2[0]})',fill=self.prism,font='Times 20 bold')
-        canvas.create_text(500,930-self.scrollY,anchor='w',text=f'= {self.sampleBlocks[1]()}',fill=self.prism,font='Times 20 bold')
+        canvas.create_text(600,910-self.scrollY,anchor='w',text=f'Quandry({operands2[0]})',fill=self.prism,font='Times 20 bold')
+        canvas.create_text(600,930-self.scrollY,anchor='w',text=f'= {self.sampleBlocks[1]()}',fill=self.prism,font='Times 20 bold')
         operands3 = self.sampleBlocks[2].operands
-        canvas.create_text(550,1010-self.scrollY,anchor='w',text=chunkifyString(f'Enigma({operands3[0]()},{operands3[1]},{operands3[2]})',27)+'\n'+chunkifyString(f'= {self.sampleBlocks[2]()}',27),fill=self.prism,font='Times 20 bold')
+        canvas.create_text(600,1010-self.scrollY,anchor='w',text=chunkifyString(f'Enigma({operands3[0]()},{operands3[1]},{operands3[2]})',27)+'\n'+chunkifyString(f'= {self.sampleBlocks[2]()}',27),fill=self.prism,font='Times 20 bold')
         operands4 = self.sampleBlocks[3].operands
-        canvas.create_text(500,1160-self.scrollY,anchor='w',text=f'Riddle({operands4[0]},{operands4[1]})',fill=self.prism,font='Times 20 bold')
-        canvas.create_text(500,1180-self.scrollY,anchor='w',text=f'= {self.sampleBlocks[3]()}',fill=self.prism,font='Times 20 bold')
+        canvas.create_text(600,1160-self.scrollY,anchor='w',text=f'Riddle({operands4[0]},{operands4[1]})',fill=self.prism,font='Times 20 bold')
+        canvas.create_text(600,1180-self.scrollY,anchor='w',text=f'= {self.sampleBlocks[3]()}',fill=self.prism,font='Times 20 bold')
         operands5 = self.sampleBlocks[4].operands
-        canvas.create_text(550,1260-self.scrollY,anchor='w',text=chunkifyString(f'Riddle({operands5[0]},{operands5[1]()})',27)+'\n'+chunkifyString(f'= {self.sampleBlocks[4]()}',27),fill=self.prism,font='Times 20 bold')
+        canvas.create_text(600,1260-self.scrollY,anchor='w',text=chunkifyString(f'Riddle({operands5[0]},{operands5[1]()})',27)+'\n'+chunkifyString(f'= {self.sampleBlocks[4]()}',27),fill=self.prism,font='Times 20 bold')
 
     def redrawAll(self,canvas):
         for i in self.textList:
             tD = {'text': i['text'], 'font': i['font'], 'anchor': i['anchor'], 'fill': i['fill']}
             if i['text'] == 'K.I.M.C.H.I.': tD['fill'] = self.prism
             canvas.create_text(i['x'],i['y']-self.scrollY,**tD)
-        for i in self.sampleBlocks:
-            if isinstance(i,Function): i.drawFunction(canvas,self)
-            else: i.drawAtom(canvas,self)
-        x0, y2, x1, y3, xA, r = 750, 0, 800, 60, 775, 25
-        xB, yB, xC, yC, xD, yD = 750, 740-self.scrollY, 770, 775-self.scrollY, 790, 700-self.scrollY
+        canvas.create_rectangle(800,0,1000,800,fill='#121212',width=0)
+        x0, y2, x1, y3, xA, r = 950, 0, 1000, 60, 975, 25
+        xB, yB, xC, yC, xD, yD = 870, 740, 900, 775, 930, 700
         canvas.create_polygon(xC-5,yC,xC+5,yC,xC+10,yD,xC-10,yD,fill=self.prism,width=0,smooth=True)
         canvas.create_polygon(xB,yB-10,xB,yB+10,xC,yC+10,xD,yB+10,xD,yB-10,xC,yC-10,fill=self.prism,width=0,smooth=True)
         canvas.create_rectangle(x0,y2,x1,y3,width=0,fill=darkenColor('#99aaff',2))
         canvas.create_oval(x0-r/1.5,y2,x0+r/1.5,y3,width=0,fill=darkenColor('#99aaff',2))
         canvas.create_polygon(x0,y2+20,x0,y3-10,x1-15,y3-10,x1-15,y2+20,xA-7,y2+10,width=0,fill='#99aaff')
         self.drawDemoEval(canvas) 
+        for i in self.sampleBlocks:
+            if isinstance(i,Function): i.drawFunction(canvas,self)
+            else: i.drawAtom(canvas,self)
+
+class DrawingMode(Mode): # Mode for drawing a custom background
+
+    dots = {}
+
+    def appStarted(self):
+        self.rY = 190
+        self.gY = 190
+        self.bY = 190
+        self.cColor = '#000000'
+        self.size = 20
+        self.erasing = False
+        self.dotDict = DrawingMode.dots
+
+    def modeActivated(self):
+        self.dotDict = DrawingMode.dots
+
+    def buttonCords(self,x,y,w,h):
+        x0, y0 = x - w, y + h
+        x1, y1 = x + w, y + h
+        x2, y2 = x + w, y - h
+        x3, y3 = x - w, y - h
+        return (x0-5,y0-5),(x0,y0),(x0+5,y0+5),(x1-5,y1+5),(x1,y1),(x1+5,y1-5),(x2+5,y2+5),(x2,y2),(x2-5,y2-5),(x3+5,y3-5),(x3,y3),(x3-5,y3+5)
+
+    def mouseDragged(self,event):
+        if event.x > 31 and event.x < 43 and abs(event.y-400) < 100: self.rY = min(190,max(0,event.y-300))
+        elif event.x > 54 and event.x < 66 and abs(event.y-400) < 100: self.gY = min(190,max(0,event.y-300))
+        elif event.x > 77 and event.x < 89 and abs(event.y-400) < 100: self.bY = min(190,max(0,event.y-300))
+        elif self.erasing:
+            d = {}
+            for x,y in self.dotDict: 
+                if (x-event.x)**2 + (y-event.y)**2 > self.dotDict[(x,y)][0]**2: d[(x,y)] = self.dotDict[(x,y)]
+            self.dotDict = d
+        else: self.dotDict[(event.x,event.y)] = (self.size,self.cColor)
+        self.cColor = rgb2hex(int(255-1.34*self.rY),int(255-1.34*self.gY),int(255-1.34*self.bY))
+
+    def keyPressed(self,event):
+        if event.key == 'Up': self.size = min(40,self.size+3)
+        if event.key == 'Down': self.size = max(5,self.size-3)
+
+    def mousePressed(self,event):
+        if event.x > 20 and event.x < 100:
+            if event.y > 550 and event.y < 610: self.erasing = not self.erasing
+            if event.y > 625 and event.y < 675: DrawingMode.dots = self.dotDict; self.app.setActiveMode(self.app.splashMode)
+            if event.y > 690 and event.y < 750: self.dotDict = {}
+        elif self.erasing:
+            d = {}
+            for x,y in self.dotDict: 
+                if (x-event.x)**2 + (y-event.y)**2 > self.dotDict[(x,y)][0]**2: d[(x,y)] = self.dotDict[(x,y)]
+            self.dotDict = d
+        else: self.dotDict[(event.x,event.y)] = (self.size,self.cColor)
+
+    def redrawAll(self,canvas):
+        for x,y in self.dotDict:
+            r,c = self.dotDict[(x,y)]
+            canvas.create_oval(x-r,y-r,x+r,y+r,fill=c,width=0)
+        canvas.create_rectangle(20,290,100,510,fill='#cccccc',width=0)
+        canvas.create_polygon(*self.buttonCords(37,400,3,100),fill='#eeeeee',width=0,smooth=True)
+        canvas.create_polygon(*self.buttonCords(60,400,3,100),fill='#eeeeee',width=0,smooth=True)
+        canvas.create_polygon(*self.buttonCords(83,400,3,100),fill='#eeeeee',width=0,smooth=True)
+        canvas.create_oval(31,300+self.rY,43,312+self.rY,fill='Red',width=0)
+        canvas.create_oval(54,300+self.gY,66,312+self.gY,fill='Green',width=0)
+        canvas.create_oval(77,300+self.bY,89,312+self.bY,fill='Blue',width=0)
+        canvas.create_oval(60-self.size,240-self.size,60+self.size,240+self.size,fill=self.cColor)
+        if self.erasing: canvas.create_rectangle(20,550,100,610,fill='#aaaaaa',width=0)
+        else: canvas.create_rectangle(20,550,100,610,fill='#dddddd',width=0)
+        canvas.create_text(60,580,text='ERASE',font='Times 20 bold')
+        canvas.create_rectangle(20,625,100,675,fill='#dddddd',width=0)
+        canvas.create_text(60,647.5,text='EXIT',font='Times 20 bold')
+        canvas.create_rectangle(20,690,100,750,fill='#dddddd',width=0)
+        canvas.create_text(60,720,text='CLEAR',font='Times 20 bold')
 
 class TopLevel(ModalApp): # Outermost app class
     
     globalCanvas = None
     curMode = 0
-    width = height = 800
+    width = 1000
+    height = 800
 
     def appStarted(self):
         self._root.resizable(False, False)
@@ -1505,6 +1614,7 @@ class TopLevel(ModalApp): # Outermost app class
         self.sandboxMode = Sandbox()
         self.loadMode = LoadMode()
         self.tutorialMode = TutorialMode()
+        self.drawingMode= DrawingMode()
         self.setActiveMode(self.splashMode)
         self.funcStrings = ''
         self.vBars, self.hBars = self.generateToothpickCurve(set([(400,400)]),set(),28)
@@ -1577,18 +1687,21 @@ class TopLevel(ModalApp): # Outermost app class
                     for i in customFunctions:
                         f.write('f: '+str(i.exportFunction())+'\n')
                     f.write(Dragger.exportClones())
+                    f.write('\nd: '+str(DrawingMode.dots))
                     f.close()
             else:
                 f = open(f"<<KimchiFile>> {sName}.txt","w+")
                 for i in customFunctions:
                     f.write('f: '+str(i.exportFunction())+'\n')
                 f.write(Dragger.exportClones())
+                f.write('\nd: '+str(DrawingMode.dots))
                 f.close()
 
     @staticmethod
     def loadFile(name): # Loads a Kimchi File
         try:
             TopLevel.wipeBlocks()
+            DrawingMode.dots = {}
             f = open(f"<<KimchiFile>> {name}.txt","r")
             r = f.read()
             for i in r.splitlines():
@@ -1602,6 +1715,9 @@ class TopLevel(ModalApp): # Outermost app class
                         TopLevel.VariableSlots = VarSetFunction('Set Variables',list(map(lambda x: Dragger.superGenesis(x),t[3:])))
                         TopLevel.Vars = TopLevel.VariableSlots.slots
                     else: Dragger.superGenesis(t)
+                if i[0:3] == 'd: ':
+                    t = eval(i.strip('d: '))
+                    DrawingMode.dots = t
             TopLevel.VariableSlots.slotify()
             TopLevel.VariableSlots.getDimensions()
             f.close()
@@ -1611,9 +1727,9 @@ class TopLevel(ModalApp): # Outermost app class
 
     @staticmethod
     def globalException(e): # What to put on screen instead of an exception that crashes TKinter
-        x0, y0 = TopLevel.width * 0.825, TopLevel.height * 0.8625
+        x0, y0 = 710, 690
         TopLevel.globalCanvas.create_oval(x0,y0,x0+20,y0+20,fill='#f2e422',width=0)
-        TopLevel.globalCanvas.create_text(x0,y0+25,text=chunkifyString(customError(e),25),anchor='nw',font='Times 12',fill='White')
+        TopLevel.globalCanvas.create_text(x0,y0+40,text=chunkifyString(customError(e),50),anchor='nw',font='Times 12',fill='White')
 
     @staticmethod
     def generateAtoms(atomX): # Generates all Atoms
@@ -1664,4 +1780,4 @@ class TopLevel(ModalApp): # Outermost app class
         TopLevel.generateIO(25)
         TopLevel.generateFunctions(25)
 
-TopLevel(width=800,height=800)
+TopLevel(width=1000,height=800)
